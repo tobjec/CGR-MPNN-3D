@@ -86,7 +86,7 @@ class PreProcessTransition1x:
                  dlink_transition: str='https://figshare.com/ndownloader/files/36035789/transition1x.h5',
                  dlink_wb97xd3_csv: str='https://zenodo.org/records/3715478/files/wb97xd3.csv',
                  dlink_wb97xd3: str='https://zenodo.org/records/3715478/files/wb97xd3.tar.gz',
-                 rxn_range: int=11961, keep_downloads: bool=True):
+                 rxn_range: int=11961, keep_downloads: bool=False):
         
         self.fpath_download = Path(fpath_download)
         self.fpath_processed = Path(fpath_processed)

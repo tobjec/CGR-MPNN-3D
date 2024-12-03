@@ -19,7 +19,7 @@ class ChemDataset(Dataset):
         if self.mode == 'mol':
             molgraph = MolGraph(smi)
         elif self.mode == 'rxn':
-            molgraph = RxnGraph
+            molgraph = RxnGraph(smi)
         else:
             raise ValueError("Unknown option for mode", self.mode)
         mol = self.molgraph2data(molgraph, key)
