@@ -1,6 +1,7 @@
 import urllib.request
 import numpy as np
 from transition1x import Dataloader
+from tqdm import tqdm
 import os
 import ase
 import ase.io
@@ -99,13 +100,14 @@ class PreProcessTransition1x:
         self.rxn_range = rxn_range
         self.keep_downloads = keep_downloads
 
+    def start_data_acquisition(self, data_sets: list=['train', 'val', 'test']):
         self.create_folders()
         self.download_files()
         print(f'Start of the extraction of {self.folder_to_extract}')
-        #self.extract_files()
+        self.extract_files()
         print('End of the extraction')
         print('Beginning of the dataset creation.')
-        self.create_dataset_files()
+        self.create_dataset_files(data_sets)
 
     def download_files(self):
         
@@ -129,12 +131,12 @@ class PreProcessTransition1x:
             shutil.unpack_archive(fpath, folder_to_extract)
             print(f'File {filename} extracted to {folder_to_extract.as_posix()}')
     
-    def create_dataset_files(self):
+    def create_dataset_files(self, data_sets: list):
         
         rrs, pps = process_rxn_files(self.folder_to_extract, self.rxn_range)
         d = pd.read_csv(self.fpath_wb97xd3_csv)
 
-        for split in ['test']:
+        for split in tqdm(data_sets, desc='Data Splits', dynamic_ncols=True):
 
             dataloader = Dataloader(self.fpath_transition, only_final=True, datasplit=split)
 
@@ -142,7 +144,7 @@ class PreProcessTransition1x:
             e_a = []
             e_a_original = []
             rxns = []
-            for molecule in dataloader:
+            for molecule in tqdm(dataloader, desc=f'Data records {split}', dynamic_ncols=True):
                 #Make XYZ, energies, forces:
                 for s in ["reactant", "transition_state", "product"]:
                     atoms = Atoms(molecule[s]["atomic_numbers"])
@@ -181,5 +183,6 @@ class PreProcessTransition1x:
         if not self.fpath_download.exists(): self.fpath_download.mkdir(parents=True)
 
 if __name__ == '__main__':
-    
-    PreProcessTransition1x()
+
+    data_acquisition = PreProcessTransition1x()
+    data_acquisition.start_data_acquisition()

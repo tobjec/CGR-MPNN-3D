@@ -1,219 +1,124 @@
-## Feel free to change the imports according to your implementation and needs
 import argparse
 import os
 import torch
-import torchvision.transforms.v2 as v2
+import torch.nn.functional as F
 from pathlib import Path
 import os
-from tqdm import tqdm
-import json
-from concurrent import futures
 
-from dlvc.models.class_model import DeepClassifier # etc. change to your model
-from dlvc.metrics import Accuracy
-from dlvc.trainer import ImgClassificationTrainer
-from dlvc.datasets.cifar10 import CIFAR10Dataset
-from dlvc.datasets.dataset import Subset
-from test import test
-
-from dlvc.models.cnn import MyCNN
-
-modelIn = MyCNN()
-
-nameIn = 'CNN'
-
-num_epoch = 30
-
-# Path to the CIFAR10 Dataset
-path_cifar10 = "/home/tjechtl/Downloads/cifar-10-batches-py/"
-
-optimizer = torch.optim.AdamW
-
-transformer1 = v2.Compose([v2.ToImage(), v2.ToDtype(torch.float32, scale=True),
-                        v2.Normalize(mean = [0.485, 0.456,0.406], std = [0.229, 0.224, 0.225])])
-
-transformer2 = v2.Compose([v2.ToImage(), v2.RandomVerticalFlip(), v2.ToDtype(torch.float32, scale=True),
-                        v2.Normalize(mean = [0.485, 0.456,0.406], std = [0.229, 0.224, 0.225])])
-
-transformer3 = v2.Compose([v2.ToImage(), v2.RandomCrop(32, padding=4), v2.ToDtype(torch.float32, scale=True),
-                        v2.Normalize(mean = [0.485, 0.456,0.406], std = [0.229, 0.224, 0.225])])
-
-# Naming convention is the model name, the weight decay exponent, the exponent of learning rate and transformer
-names = [f"{nameIn}-0-3-standard", f"{nameIn}-0-3-vertical_flip", f"{nameIn}-4-3-crop", f"{nameIn}-2-2-standard"]
-
-weight_decays = [0,0,1e-4,1e-2]
-
-learning_rates = [1e-3, 1e-3, 1e-3, 1e-2]
-
-transformers = [transformer1, transformer2, transformer3, transformer1]
+from cgr_mpnn_3D.models import CGR
+from cgr_mpnn_3D.data import ChemDataset
+from cgr_mpnn_3D.training.trainer import RxnGraphTrainer
+from cgr_mpnn_3D.utils.json_dumper import json_dumper
+from download_preprocess_datasets import PreProcessTransition1x
 
 
-def train(name, num_epochs, transformerIn, optimizerIn, weight_decayIn=0, lrIn=1e-3, path_cifar10=path_cifar10):
+def train(name: str, depth: int=3, hidden_sizes: list=[300,300,300], dropout_ps: list=[0.02,0.02,0.02],
+          activation_fn: F=F.relu, save_path: str='saved_models', use_learnable_skip: bool=False,
+          lr: float=1e-3, num_epochs: int=30, weight_decay: float=0, batch_size: int=32,
+          gamma: float=1, data_path: str='datasets', gpu_id: int=0) -> dict:
 
-    ### Implement this function so that it trains a specific model as described in the instruction.md file
-    ## feel free to change the code snippets given here, they are just to give you an initial structure 
-    ## but do not have to be used if you want to do it differently
-    ## For device handling you can take a look at pytorch documentation
+    data_path_train = Path(data_path) / 'train.csv'
+    data_path_val = Path(data_path) / 'val.csv'
+
+    data_sets = []
+    if not data_path_train.exists(): data_sets.append('train')
+    if not data_path_val.exists(): data_sets.append('val')
+    if data_sets: PreProcessTransition1x().start_data_acquisition(data_sets)
+
+    train_data = ChemDataset(data_path_train)
+    val_data = ChemDataset(data_path_val)
     
-    
-    train_transform = transformerIn
-    
-    val_transform = transformerIn
-    
-    train_data = CIFAR10Dataset(path_cifar10, Subset.TRAINING, transform=train_transform)
-    
-    val_data = CIFAR10Dataset(path_cifar10, Subset.VALIDATION, transform=val_transform) 
+    match name:
+        case 'CGR':
+            model = CGR(train_data[0].num_node_features, train_data[0].num_edge_features,
+                        depth=depth, hidden_sizes=hidden_sizes, dropout_ps=dropout_ps,
+                        activation_fn=activation_fn, use_learnable_skip=use_learnable_skip)
+        case 'CGR_MPNN_3D':
+            pass
+        case _:
+            raise NameError(f'Unkown model with name {name}')
+
         
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-    model = modelIn
-    model.train()
-
-    model = DeepClassifier(model)
+    device = torch.device(f'cuda:{gpu_id}' if torch.cuda.is_available() else 'cpu')
     model.to(device)
-    optimizer = optimizerIn(model.parameters(), lr=lrIn, amsgrad=True, weight_decay=weight_decayIn)
-    loss_fn = torch.nn.CrossEntropyLoss()
-    
-    train_metric = Accuracy(classes=train_data.classes)
-    val_metric = Accuracy(classes=val_data.classes)
-    val_frequency = 5
 
-    model_save_dir = Path("saved_models")
-    model_save_dir.mkdir(exist_ok=True)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay, amsgrad=True)
+    loss_fn = torch.nn.MSELoss()
 
-    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.9)
+    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=gamma)
     
-    trainer = ImgClassificationTrainer(name,
+    trainer = RxnGraphTrainer(name,
                     model, 
                     optimizer,
                     loss_fn,
                     lr_scheduler,
-                    train_metric,
-                    val_metric,
                     train_data,
                     val_data,
                     device,
                     num_epochs, 
-                    model_save_dir,
-                    batch_size=128, # feel free to change
-                    val_frequency = val_frequency)
+                    save_path,
+                    batch_size=batch_size)
     
     return trainer.train()
-
-class Standardizer:
-    def __init__(self, mean, std):
-        self.mean = mean
-        self.std = std
-
-    def __call__(self, x, rev=False):
-        if rev:
-            return (x * self.std) + self.mean
-        return (x - self.mean) / self.std
-
-def train_epoch(model, loader, optimizer, loss, stdzer):
-    model.train()
-    loss_all = 0
-
-    for data in loader:
-        optimizer.zero_grad()
-
-        out = model(data)
-        result = loss(out, stdzer(data.y))
-        result.backward()
-
-        optimizer.step()
-        loss_all += loss(stdzer(out, rev=True), data.y)
-
-    return math.sqrt(loss_all / len(loader.dataset))
-
-def pred(model, loader, loss, stdzer):
-    model.eval()
-
-    preds, ys = [], []
-    with torch.no_grad():
-        for data in loader:
-            out = model(data)
-            pred = stdzer(out, rev=True)
-            preds.extend(pred.cpu().detach().tolist())
-
-    return preds
-
-def train(folder, mode='mol'):
-    torch.manual_seed(0)
-    train_loader = construct_loader(folder+"/train_full.csv", True, mode=mode)
-    val_loader = construct_loader(folder+"/val_full.csv", False, mode=mode)
-    test_loader = construct_loader(folder+"/test_full.csv", False, mode=mode)
-    mean = np.mean(train_loader.dataset.labels)
-    std = np.std(train_loader.dataset.labels)
-    stdzer = Standardizer(mean, std)
-
-    model = GNN(train_loader.dataset.num_node_features, train_loader.dataset.num_edge_features)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    loss = nn.MSELoss(reduction='sum')
-    print(model)
-
-    for epoch in range(0, 30):
-        train_loss = train_epoch(model, train_loader, optimizer, loss, stdzer)
-        preds = pred(model, val_loader, loss, stdzer)
-        print("Epoch",epoch,"  Train RMSE", train_loss,"   Val RMSE", mean_squared_error(preds,val_loader.dataset.labels, squared=False))
-
-    preds = pred(model, test_loader, loss, stdzer)
-    print("Test RMSE", mean_squared_error(preds,test_loader.dataset.labels, squared=False))
-    print("Test MAE", mean_absolute_error(preds,test_loader.dataset.labels))
-
-# Function to parallelize the training 
-def train_and_test(name, weight_decay, lr, transformer, optimizer, path_cifar10, modelIn):
-
-    train_result = train(name, num_epoch, transformer, optimizer, weight_decayIn=weight_decay, lrIn=lr, path_cifar10=path_cifar10)
-    
-    test_result = test(Path("saved_models") / (name + '.pth'), modelIn, transformer, path_cifar10=path_cifar10)
-    
-    train_result.update(test_result)
-    return name, train_result
 
 
 if __name__ == "__main__":
     ## Feel free to change this part - you do not have to use this argparse and gpu handling
-    args = argparse.ArgumentParser(description='Training')
-    args.add_argument('-d', '--gpu_id', default='0', type=str,
-                      help='index of which GPU to use')
+    args = argparse.ArgumentParser(description='CLI tool for training the CGR MPNN 3D Graph Neural Network.')
+    args.add_argument('-n', '--name', default='CGR', choices=['CGR', 'CGR_MPNN_3D'], type=str,
+                      help='Type of the model to be trained')
+    args.add_argument('-d', '--depth', default=3, type=int, help='Depth of GNN')
+    args.add_argument('-h', '--hidden_sizes', default=[300, 300, 300], nargs='+', type=int,
+                      help='Size of hidden layers')
+    args.add_argument('-p', '--dropout_ps', default=[0.02, 0.02, 0.02], nargs='+', type=float,
+                      help='Dropout probability of the hidden layers')
+    args.add_argument('-a', '--activation_fn', default='ReLU', choices=['ReLU', 'SiLU', 'GELU'], type=str,
+                      help='Activation function for the GNN')
+    args.add_argument('-s', '--save_path', default='saved_models', type=str, help='Path to the saved model parameters')
+    args.add_argument('-k', '--learnable_skip', default='False', type=str, help='Using of learnable skip connections')
+    args.add_argument('-l', '--learning_rate', default=1e-3, type=float, help='Learning rate for the GNN')
+    args.add_argument('-e', '--num_epochs', default=30, type=int, help='Number of training epochs')
+    args.add_argument('-w', '--weight_decay', default=0, type=float, help='Weight decay regularization for the optimizer')
+    args.add_argument('-b', '--batch_size', default=32, type=int, help='Batch size of the training data')
+    args.add_argument('-m', '--gamma', default=1, type=float, help='Gamma value for the learning rate scheduler')
+    args.add_argument('-u', '--data_path', default='datasets', type=str, help='Path to .csv data sets')
+    args.add_argument('-g', '--gpu_id', default=0, type=int, help='Index of which GPU to use')
+    args.add_argument('-f', '--file_path', default='parameter_study.json', type=str, help='Filename to training outcomes')
     
-    if not isinstance(args, tuple):
-        args = args.parse_args()
+    args = args.parse_args()
+
     os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu_id)
-    args.gpu_id = 0
 
-    dict_parameter_study_resnet = {}
+    name = '_'.join([args.name, f'd-{args.depth}','h-'+'-'.join([str(i) for i in args.hidden_sizes]), 
+                    'p-'+'-'.join([str(i) for i in args.dropout_ps]), args.activation_fn,
+                    f's-{'t' if args.learnable_skip=='True' else 'f'}', f'l-{args.learning_rate}',
+                    f'e-{args.num_epochs}', f'w-{args.weight_decay}', f'b-{args.batch_size}',
+                    f'g-{args.gamma}'])
 
-    for name, weight_decay, lr, transformer in zip(names, weight_decays, learning_rates, transformers):
-        dict_parameter_study_resnet[name] = train(name, num_epoch, transformer, optimizer, weight_decayIn=weight_decay,
-                           lrIn=lr, path_cifar10=path_cifar10)
+    result_metadata_dict = {name: {'metadata': {'depth': args.depth, 'hidden_sizes': args.hidden_sizes,
+                                            'dropout_ps': args.dropout_ps,'activation_fn': args.activation_fn,
+                                            'learnable_skip': args.learnable_skip, 'lr': args.learning_rate,
+                                            'num_epochs': args.num_epochs, 'weight_decay': args.weight_decay,
+                                            'batch_size': args.batch_size, 'gamma': args.gamma}}}
+
+    match args.activation_fn:
+        case 'ReLu':
+            args.activation_fn = F.relu
+        case 'SiLU':
+            args.activation_fn = F.silu
+        case 'GELU':
+            args.activation_fn = F.gelu
+    
+    args.learnable_skip = False if args.learnable_skip=='False' else True
+
+    train_result = train(name, args.depth, args.hidden_sizes, args.dropout_ps, args.activation_fn,
+                         args.save_path, args.learnable_skip, args.learnable_skip, args.learning_rate,
+                         args.num_epochs, args.weight_decay, args.batch_size, args.gamma, args.data_path, args.gpu_id)
+    
+    result_metadata_dict[name].update(**train_result)
         
-        dict_parameter_study_resnet[name].update(test(Path("saved_models") / (name+'.pth'),
-                                                      modelIn, transformer,
-                                                      path_cifar10=path_cifar10))
     
-    #with futures.ProcessPoolExecutor(max_workers=4) as e:
-    #    # Create a list of futures
-    #    futures = [e.submit(train_and_test, name, weight_decay, lr, transformer, optimizer, path_cifar10, modelIn)
-    #            for name, weight_decay, lr, transformer in zip(names, weight_decays, learning_rates, transformers)]
-    #    
-    #    # Collect results as they complete
-    #    for future in futures.as_completed(futures):
-    #        name, result = future.result()
-    #        dict_parameter_study_resnet[name] = result
-        
+    json_file_path = Path('hyperparameter_study').mkdir(parents=True, exist_ok=True) / \
+                     f'{args.name}_hyperparameter_study.json'
     
-    file_path = f'{nameIn}_parameter_study.json'
-
-    # Check if the file already exists and has content
-    try:
-        with open(file_path, 'r') as file:
-            data = json.load(file)
-    except (FileNotFoundError, json.JSONDecodeError):
-        data = {}
-    
-    data.update(dict_parameter_study_resnet)
-
-    with open(file_path, 'w') as file:
-        json.dump(data, file, indent=4)
+    json_dumper(json_file_path.as_posix(), result_metadata_dict)

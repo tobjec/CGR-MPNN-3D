@@ -1,59 +1,81 @@
-import pandas as pd
-import numpy as np
-import math
-import matplotlib.pyplot as plt
-
 import torch
-from torch import nn
+import torch.nn as nn
 import torch.nn.functional as F
-
-import torch_geometric as tg
-from torch_geometric.data import Dataset
-from torch_geometric.loader import DataLoader
-from torch_geometric.nn import MessagePassing
-from torch_geometric.nn import global_add_pool
-
-from sklearn.metrics import mean_absolute_error, mean_squared_error
+from torch_geometric.nn import MessagePassing, global_add_pool, global_mean_pool, global_max_pool
 
 class GNN(nn.Module):
-    def __init__(self, num_node_features, num_edge_features, depth=3, hidden_size=300, p_dropout=0.02):
+    def __init__(
+        self,
+        num_node_features,
+        num_edge_features,
+        depth=3,
+        hidden_sizes=None,
+        dropout_ps=None,
+        activation_fn=F.relu,
+        aggr='add',
+        pooling_fn=global_add_pool,
+        use_learnable_skip=False,
+    ):
         super(GNN, self).__init__()
-
+        
+        # Initialize parameters
         self.depth = depth
-        self.hidden_size = hidden_size
-        self.dropout = p_dropout
-
-        self.edge_init = nn.Linear(num_node_features + num_edge_features, self.hidden_size)
-        self.convs = torch.nn.ModuleList()
-        for _ in range(self.depth):
-            self.convs.append(DMPNNConv(self.hidden_size))
-        self.edge_to_node = nn.Linear(num_node_features + self.hidden_size, self.hidden_size)
-        self.pool = global_add_pool
-        self.ffn = nn.Linear(self.hidden_size, 1)
+        self.hidden_sizes = hidden_sizes or [300] * depth
+        self.dropout_ps = dropout_ps or [0.02] * depth
+        self.activation_fn = activation_fn()
+        self.pooling_fn = pooling_fn
+        self.use_learnable_skip = use_learnable_skip
+        
+        # Initial edge features
+        self.edge_init = nn.Linear(num_node_features + num_edge_features, self.hidden_sizes[0])
+        
+        # Graph convolution layers
+        self.convs = nn.ModuleList()
+        for i in range(self.depth):
+            self.convs.append(DMPNNConv(self.hidden_sizes[i], aggr=aggr))
+        
+        # Edge-to-node aggregation
+        self.edge_to_node = nn.Linear(num_node_features + self.hidden_sizes[-1], self.hidden_sizes[-1])
+        
+        # Fully connected layer for prediction
+        self.ffn = nn.Linear(self.hidden_sizes[-1], 1)
+        
+        # Learnable skip connections
+        if self.use_learnable_skip:
+            self.skip_weights = nn.ParameterList([nn.Parameter(torch.tensor(1.0)) for _ in range(self.depth)])
 
     def forward(self, data):
         x, edge_index, edge_attr, batch = data.x, data.edge_index, data.edge_attr, data.batch
 
-        # initial edge features
+        # Initialize edge features
         row, col = edge_index
-        h_0 = F.relu(self.edge_init(torch.cat([x[row], edge_attr], dim=1)))
+        h_0 = self.activation_fn(self.edge_init(torch.cat([x[row], edge_attr], dim=1)))
         h = h_0
 
-        # convolutions
+        # Perform graph convolutions
         for l in range(self.depth):
             _, h = self.convs[l](edge_index, h)
-            h += h_0
-            h = F.dropout(F.relu(h), self.dropout, training=self.training)
+            
+            # Skip connections
+            if self.use_learnable_skip:
+                h += self.skip_weights[l] * h_0
+            else:
+                h += h_0
+            
+            # Apply dropout and activation
+            h = F.dropout(self.activation_fn(h), self.dropout_ps[l], training=self.training)
 
-        # dmpnn edge -> node aggregation
-        s, _ = self.convs[l](edge_index, h) #only use for summing
-        q  = torch.cat([x,s], dim=1)
-        h = F.relu(self.edge_to_node(q))
-        return self.ffn(self.pool(h, batch)).squeeze(-1)
+        # Edge-to-node aggregation
+        s, _ = self.convs[-1](edge_index, h)  # Only for summing
+        q = torch.cat([x, s], dim=1)
+        h = self.activation_fn(self.edge_to_node(q))
+        
+        # Pooling and final prediction
+        return self.ffn(self.pooling_fn(h, batch)).squeeze(-1)
 
 class DMPNNConv(MessagePassing):
-    def __init__(self, hidden_size):
-        super(DMPNNConv, self).__init__(aggr='add')
+    def __init__(self, hidden_size, aggr='add'):
+        super(DMPNNConv, self).__init__(aggr=aggr)
         self.lin = nn.Linear(hidden_size, hidden_size)
 
     def forward(self, edge_index, edge_attr):
