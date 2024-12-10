@@ -5,7 +5,7 @@ import numpy as np
 
 from cgr_mpnn_3D.utils.graph_features import MolGraph, RxnGraph
  
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 
 class ChemDataset(Dataset):
     def __init__(self, data_path: str, mode='rxn'):

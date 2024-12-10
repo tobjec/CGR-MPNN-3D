@@ -1,9 +1,9 @@
-import torch
+import torch_geometric as tg
 import numpy as np
 
 class Standardizer:
 
-    def __init__(self, dataloader: torch.utils.data.DataLoader):
+    def __init__(self, dataloader: tg.loader.DataLoader):
         self.mean = np.mean(dataloader.dataset.labels)
         self.std = np.std(dataloader.dataset.labels)
     

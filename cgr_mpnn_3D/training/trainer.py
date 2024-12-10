@@ -1,13 +1,14 @@
 import torch
 from torch import nn
-from typing import Tuple
+import torch_geometric as tg
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
 import numpy as np
 import os
-from cgr_mpnn_3D.data import ChemDataset
+from cgr_mpnn_3D.data.ChemDataset import ChemDataset
 from cgr_mpnn_3D.utils.standardizer import Standardizer
-import tqdm 
+import tqdm
+from wandb_logger import WandBLogger 
 
 class BaseTrainer(metaclass=ABCMeta):
     '''
@@ -23,7 +24,7 @@ class BaseTrainer(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def _val_epoch(self) -> Tuple[float, float, float]:
+    def _val_epoch(self) -> float:
         '''
         Holds validation logic for one epoch.
         '''
@@ -31,7 +32,7 @@ class BaseTrainer(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def _train_epoch(self) -> Tuple[float, float, float]:
+    def _train_epoch(self) -> float:
         '''
         Holds training logic for one epoch.
         '''
@@ -56,7 +57,8 @@ class RxnGraphTrainer(BaseTrainer):
                  model_save_dir: str = "saved_models",
                  batch_size: int = 30,
                  num_workers: int = None,
-                 val_frequency: int = 5) -> None:
+                 val_frequency: int = 5,
+                 logger: WandBLogger=None) -> None:
         '''
         Args and Kwargs:
             name (str): Name of the model.
@@ -92,20 +94,26 @@ class RxnGraphTrainer(BaseTrainer):
         self.val_data = val_data
         self.device = device
         self.num_epochs = num_epochs
-        self.model_save_dir = Path(model_save_dir).mkdir(parents=True, exist_ok=True)
+        self.model_save_dir = Path(model_save_dir)
+        self.model_save_dir.mkdir(parents=True, exist_ok=True)
         self.batch_size = batch_size
         self.num_workers = num_workers or os.cpu_count() // 2 
         self.val_frequency = val_frequency
         self.best_val_loss = np.inf
+        self.logger = logger
 
         # Data loaders
-        self.train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True,
+        self.train_loader = tg.loader.DataLoader(train_data, batch_size=batch_size, shuffle=True,
                                                         num_workers=self.num_workers, pin_memory=torch.cuda.is_available())
-        self.val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size, shuffle=False,
+        self.val_loader = tg.loader.DataLoader(val_data, batch_size=batch_size, shuffle=False,
                                                         num_workers=self.num_workers, pin_memory=torch.cuda.is_available())
         
         # Standardizer
         self.stdizer = Standardizer(self.train_loader)
+
+        # Wandb logger
+        if self.logger:
+            self.logger.watch(self.model)
                 
 
     def _train_epoch(self, epoch_idx: int) -> float:
@@ -129,15 +137,18 @@ class RxnGraphTrainer(BaseTrainer):
             self.optimizer.step()
 
             batch_size = data.y.size(0)
-            total_loss += self.loss_fn(self.stdizer(predictions, rev=True), data.y) * batch_size
+            total_loss += self.loss_fn(self.stdizer(predictions, rev=True), data.y).item() * batch_size
         
         mean_loss = np.sqrt(total_loss / len(self.train_loader))
+
+        if self.logger:
+            self.logger.log({"train_loss": mean_loss, "epoch": epoch_idx})
         
         print(f"\n______epoch {epoch_idx}\nTrain loss, RMSE: {mean_loss:.4f}")
         return mean_loss
 
 
-    def _val_epoch(self) -> float:
+    def _val_epoch(self, epoch_idx: int) -> float:
         """
         Validation logic for one epoch. 
         Prints current metrics at end of epoch.
@@ -157,6 +168,9 @@ class RxnGraphTrainer(BaseTrainer):
                 total_loss += loss.item() * batch_size
                 
         mean_loss = np.sqrt(total_loss / len(self.val_loader))
+
+        if self.logger:
+            self.logger.log({"val_loss": mean_loss, "epoch": epoch_idx})
         
         print(f"Val loss, RMSE: {mean_loss:.4f}\n")
         return mean_loss
@@ -181,14 +195,17 @@ class RxnGraphTrainer(BaseTrainer):
             
             if epoch_idx % self.val_frequency == 0 or epoch_idx == self.num_epochs - 1:
 
-                val_loss = self._val_epoch()
+                val_loss = self._val_epoch(epoch_idx)
                 train_dict['val_losses'].append(val_loss)
 
                 if val_loss < self.best_val_loss:
                     self.best_val_loss = val_loss
-                    best_model_path = self.training_save_dir / f"{self.name}.pth"
+                    best_model_path = self.model_save_dir / f"{self.name}.pth"
                     torch.save(self.model.state_dict(), best_model_path)
                     print(f"New best model with validation loss RMSE: {self.best_val_loss:.4f} located at {best_model_path}")
             self.lr_scheduler.step()
+        
+        if self.logger:
+            self.logger.finish()
 
         return train_dict

@@ -22,7 +22,7 @@ class GNN(nn.Module):
         self.depth = depth
         self.hidden_sizes = hidden_sizes or [300] * depth
         self.dropout_ps = dropout_ps or [0.02] * depth
-        self.activation_fn = activation_fn()
+        self.activation_fn = activation_fn
         self.pooling_fn = pooling_fn
         self.use_learnable_skip = use_learnable_skip
         

@@ -163,3 +163,13 @@ datasets/val.csv
 datasets/train.csv
 datasets/test.xyz
 datasets/test.csv
+
+# Hyperparameter tuning folders
+hyperparameter_study/
+
+# WandB related folders
+wandb/
+
+# Saved models
+saved_models/
+
