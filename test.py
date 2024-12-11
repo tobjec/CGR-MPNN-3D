@@ -13,63 +13,95 @@ from cgr_mpnn_3D.utils.standardizer import Standardizer
 from download_preprocess_datasets import PreProcessTransition1x
 
 
-def test(name: str, path_trained_model: str, data_path: str='datasets', gpu_id: int=0):
-    
+def test(name: str, path_trained_model: str, data_path: str = 'datasets', gpu_id: int = 0) -> dict:
+    """
+    Test a trained model on a dataset.
+
+    Args:
+        name (str): The name of the model architecture (e.g., 'CGR', 'CGR_MPNN_3D').
+        path_trained_model (str): Path to the trained model file.
+        data_path (str, optional): Base directory for datasets. Defaults to 'datasets'.
+        gpu_id (int, optional): GPU ID to use for testing. Defaults to 0.
+
+    Returns:
+        dict: A dictionary containing the test loss metrics.
+    """
+
+    # Define the path to the test dataset
     data_path_test = Path(data_path) / 'test.csv'
 
+    # Check if test dataset exists, otherwise acquire it
     data_sets = []
-    if not data_path_test.exists(): data_sets.append('test')
-    else: print('Test data set found at', data_path_test)
-    if data_sets: PreProcessTransition1x().start_data_acquisition(data_sets)
+    if not data_path_test.exists():
+        data_sets.append('test')
+    else:
+        print('Test data set found at', data_path_test)
 
+    if data_sets:
+        PreProcessTransition1x().start_data_acquisition(data_sets)
+
+    # Load test dataset
     test_data = ChemDataset(data_path_test)
 
-    test_data_loader = tg.loader.DataLoader(test_data, shuffle=False, num_workers=os.cpu_count()//2, 
-                                                   pin_memory=torch.cuda.is_available())
+    # Initialize data loader for the test set
+    test_data_loader = tg.loader.DataLoader(
+        test_data, shuffle=False, num_workers=os.cpu_count() // 2,
+        pin_memory=torch.cuda.is_available()
+    )
 
+    # Initialize standardizer for the dataset
     stdizer = Standardizer(test_data_loader)
 
+    # Initialize the model based on the name
     match name:
         case 'CGR':
-            model = GNN(test_data[0].num_node_features, test_data[0].num_edge_features)
+            model = GNN(
+                in_channels=test_data[0].num_node_features,
+                edge_features=test_data[0].num_edge_features
+            )
         case 'CGR_MPNN_3D':
-            pass
+            raise NotImplementedError("Model 'CGR_MPNN_3D' initialization is not implemented.")
         case _:
-            raise NameError(f'Unknown model with name {name}')
-    
-    state_dict = torch.load(path_trained_model,weights_only=True)
+            raise NameError(f"Unknown model with name '{name}'.")
 
+    # Load the trained model's weights
+    state_dict = torch.load(path_trained_model, map_location='cpu')
     model.load_state_dict(state_dict)
 
+    # Set up the device for testing
     device = torch.device(f'cuda:{gpu_id}' if torch.cuda.is_available() else 'cpu')
     model.to(device)
     model.eval()
+
+    # Define the loss function
     loss_fn = torch.nn.MSELoss(reduction='sum')
 
+    # Evaluate the model
     with torch.no_grad():
-        n_samples = len(test_data_loader)
         total_loss = 0.0
 
         for data in test_data_loader:
             data = data.to(device)
             predictions = model(data)
+            # Reverse standardization for predictions before loss computation
             loss = loss_fn(stdizer(predictions, rev=True), data.y)
-
             total_loss += loss.item()
-        
-        mean_loss = np.sqrt(total_loss / n_samples)
-        print(f"Test loss: {mean_loss:.4f}\n")
-    
-    test_dict = {'test_losses': mean_loss}
 
+        # Calculate mean test loss (root mean squared error)
+        mean_loss = np.sqrt(total_loss / len(test_data_loader.dataset))
+        print(f"Test loss: {mean_loss:.4f}\n")
+
+    # Prepare and return the results
+    test_dict = {'test_losses': mean_loss}
     return test_dict
+
 
 if __name__ == "__main__":
 
     args = argparse.ArgumentParser(description='CLI tool for testing the CGR MPNN 3D Graph Neural Network.')
     args.add_argument('-pm', '--path_trained_model', help='Path to trained model to be tested')
     args.add_argument('-dp', '--data_path', default='datasets', type=str, help='Path to .csv data sets')
-    args.add_argument('-sr', '--save_result', default='True', choices=['True', 'False'], type=str, help='Flag to save test result')
+    args.add_argument('-sr', '--save_result', default='False', choices=['True', 'False'], type=str, help='Flag to save test result')
     args.add_argument('-gid', '--gpu_id', default='0', type=str,
                       help='Index of which GPU to use')
     
@@ -80,6 +112,7 @@ if __name__ == "__main__":
     name = os.path.basename(args.path_trained_model).split('_')[0]
 
     if not Path(args.path_trained_model).exists(): raise NameError(f'Invalid model data location at {args.path_trained_model}')
+    
     test_dict = test(name, args.path_trained_model, args.data_path)
     if args.save_result: 
         json_file_path = Path('hyperparameter_study')

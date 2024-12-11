@@ -2,6 +2,16 @@ import json
 import os
 
 def json_dumper(fpath: str, dictionary: dict, add_training: str=None) -> None:
+    """
+    Routine to dump dictionary into .json file.
+
+    Args:
+        fpath (str): Path to the to be saved file.
+        dictionary (dict): To be saved dictionary.
+        add_training (str, optional): Name of saved pytorch model
+                                      to add also training data.
+                                      Defaults to None.
+    """
     
     try:
         with open(fpath, 'r') as file:

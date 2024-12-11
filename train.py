@@ -6,42 +6,98 @@ from pathlib import Path
 import os
 
 from cgr_mpnn_3D.models.CGR import GNN
+from cgr_mpnn_3D.models.CGR_MPNN_3D import GNN2
 from cgr_mpnn_3D.data.ChemDataset import ChemDataset
 from cgr_mpnn_3D.training.trainer import RxnGraphTrainer
 from cgr_mpnn_3D.utils.json_dumper import json_dumper
 from download_preprocess_datasets import PreProcessTransition1x
 from wandb_logger import WandBLogger
+from test import test
 
 
-def train(name: str, depth: int=3, hidden_sizes: list=[300,300,300], dropout_ps: list=[0.02,0.02,0.02],
-          activation_fn: F=F.relu, save_path: str='saved_models', use_learnable_skip: bool=False,
-          lr: float=1e-3, num_epochs: int=30, weight_decay: float=0, batch_size: int=32,
-          gamma: float=1, data_path: str='datasets', gpu_id: int=0, logger: WandBLogger=None) -> dict:
+def train(name: str, 
+          depth: int = 3, 
+          hidden_sizes: list = [300, 300, 300], 
+          dropout_ps: list = [0.02, 0.02, 0.02],
+          activation_fn: F = F.relu, 
+          save_path: str = 'saved_models', 
+          use_learnable_skip: bool = False,
+          lr: float = 1e-3, 
+          num_epochs: int = 30, 
+          weight_decay: float = 0, 
+          batch_size: int = 32,
+          gamma: float = 1, 
+          data_path: str = 'datasets', 
+          gpu_id: int = 0, 
+          logger: WandBLogger = None) -> dict:
+    """
+    Train a specified model on the training dataset and validate on a validation dataset.
 
+    Args:
+        name (str): Name of the model (e.g., 'CGR', 'CGR_MPNN_3D').
+        depth (int): Number of layers for the model.
+        hidden_sizes (list): List of hidden layer sizes.
+        dropout_ps (list): List of dropout probabilities.
+        activation_fn (callable): Activation function (default: ReLU).
+        save_path (str): Path to save the trained model.
+        use_learnable_skip (bool): Whether to use learnable skip connections.
+        lr (float): Learning rate for the optimizer.
+        num_epochs (int): Number of training epochs.
+        weight_decay (float): Weight decay for the optimizer.
+        batch_size (int): Batch size for training and validation.
+        gamma (float): Learning rate decay factor.
+        data_path (str): Base directory for datasets.
+        gpu_id (int): GPU ID for training (default: 0).
+        logger (WandBLogger, optional): WandB logger instance for logging.
+
+    Returns:
+        dict: A dictionary containing training results.
+    """
+
+    # Define paths to the training and validation datasets
     data_path_train = Path(data_path) / 'train.csv'
     data_path_val = Path(data_path) / 'val.csv'
 
+    # Check for the presence of datasets
     data_sets = []
-    if not data_path_train.exists(): data_sets.append('train')
-    else: print('Train data set found at', data_path_train)
-    if not data_path_val.exists(): data_sets.append('val')
-    else: print('Validation data set found at', data_path_val)
-    if data_sets: PreProcessTransition1x().start_data_acquisition(data_sets)
+    if not data_path_train.exists():
+        data_sets.append('train')
+    else:
+        print('Train data set found at', data_path_train)
 
+    if not data_path_val.exists():
+        data_sets.append('val')
+    else:
+        print('Validation data set found at', data_path_val)
+
+    if data_sets:
+        PreProcessTransition1x().start_data_acquisition(data_sets)
+
+    # Load the training and validation datasets
     train_data = ChemDataset(data_path_train.as_posix())
     val_data = ChemDataset(data_path_val.as_posix())
-    
+
+    # Initialize the model based on the name
     match name.split('_')[0]:
         case 'CGR':
-            model = GNN(train_data[0].num_node_features, train_data[0].num_edge_features,
-                        depth=depth, hidden_sizes=hidden_sizes, dropout_ps=dropout_ps,
-                        activation_fn=activation_fn, use_learnable_skip=use_learnable_skip)
+            model = GNN(
+                train_data[0].num_node_features,
+                train_data[0].num_edge_features,
+                depth=depth,
+                hidden_sizes=hidden_sizes,
+                dropout_ps=dropout_ps,
+                activation_fn=activation_fn,
+                use_learnable_skip=use_learnable_skip
+            )
         case 'CGR_MPNN_3D':
-            pass
+            model = GNN2(
+                train_data[0].num_node_features,
+                train_data[0].num_edge_features
+            )
         case _:
-            raise NameError(f'Unkown model with name {name}')
+            raise NameError(f"Unknown model with name '{name}'.")
 
-        
+    # Set up the device for training
     device = torch.device(f'cuda:{gpu_id}' if torch.cuda.is_available() else 'cpu')
     if torch.cuda.is_available():
         print(f'Starting training on CUDA:{gpu_id}.')
@@ -49,25 +105,30 @@ def train(name: str, depth: int=3, hidden_sizes: list=[300,300,300], dropout_ps:
         print('Starting training on CPU.')
     model.to(device)
 
+    # Define the optimizer and learning rate scheduler
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay, amsgrad=True)
-    loss_fn = torch.nn.MSELoss()
-
+    loss_fn = torch.nn.MSELoss(reduction='sum')
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=gamma)
-    
-    trainer = RxnGraphTrainer(name,
-                    model, 
-                    optimizer,
-                    loss_fn,
-                    lr_scheduler,
-                    train_data,
-                    val_data,
-                    device,
-                    num_epochs, 
-                    save_path,
-                    batch_size=batch_size,
-                    logger=logger)
-    
+
+    # Initialize the trainer
+    trainer = RxnGraphTrainer(
+        name=name,
+        model=model,
+        optimizer=optimizer,
+        loss_fn=loss_fn,
+        lr_scheduler=lr_scheduler,
+        train_data=train_data,
+        val_data=val_data,
+        device=device,
+        num_epochs=num_epochs,
+        save_path=save_path,
+        batch_size=batch_size,
+        logger=logger
+    )
+
+    # Start training and return the results
     return trainer.train()
+
 
 
 if __name__ == "__main__":
@@ -132,10 +193,11 @@ if __name__ == "__main__":
     train_result = train(name, args.depth, args.hidden_sizes, args.dropout_ps, args.activation_fn, args.save_path,
                          args.learnable_skip, args.learning_rate, args.num_epochs, args.weight_decay,
                          args.batch_size, args.gamma, args.data_path, args.gpu_id, logger)
+    test_result = test(f"{args.save_path}/{name}.pth")
     
     result_metadata_dict[name].update(**train_result)
-        
-    
+    result_metadata_dict[name].update(**test_result)
+       
     json_file_path = Path('hyperparameter_study')
     json_file_path.mkdir(parents=True, exist_ok=True)
     json_file_path /= f'{args.name}_hyperparameter_study.json'

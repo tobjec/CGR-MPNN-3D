@@ -1,22 +1,43 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import MessagePassing, global_add_pool, global_mean_pool, global_max_pool
+import torch_geometric as tg
+from torch_geometric.nn import MessagePassing, global_add_pool
 
 class GNN(nn.Module):
+    """
+    Convolutional Graph Neural Network implementation using
+    direct message passing.
+    """
     def __init__(
         self,
-        num_node_features,
-        num_edge_features,
-        depth=3,
-        hidden_sizes=None,
-        dropout_ps=None,
-        activation_fn=F.relu,
-        aggr='add',
-        pooling_fn=global_add_pool,
-        use_learnable_skip=False,
+        num_node_features: int,
+        num_edge_features: int,
+        depth: int=3,
+        hidden_sizes: list=None,
+        dropout_ps: list=None,
+        activation_fn: nn.functional=F.relu,
+        aggr: str='add',
+        pooling_fn: tg.nn=global_add_pool,
+        use_learnable_skip: bool=False,
     ):
-        super(GNN, self).__init__()
+        """
+        Args:
+            num_node_features (int): Number of node features.
+            num_edge_features (int): Number of edge features.
+            depth (int, optional): Depth of the DMPNN. Defaults to 3.
+            hidden_sizes (list, optional): Hidden sizes of the DPMNN layers.
+                                           Defaults to None.
+            dropout_ps (list, optional): Dropout regularization probability for
+                                         the DPMNN layers. Defaults to None.
+            activation_fn (nn.functional, optional): Activation function of the GNN.
+                                                     Defaults to F.relu.
+            aggr (str, optional): Aggregation of the DMPNN. Defaults to 'add'.
+            pooling_fn (tg.nn, optional): Pooling function.. Defaults to global_add_pool.
+            use_learnable_skip (bool, optional): Flag to use learnable skip in the
+                                                 message passing layers. Defaults to False.
+        """
+        super().__init__()
         
         # Initialize parameters
         self.depth = depth
@@ -48,7 +69,7 @@ class GNN(nn.Module):
         x, edge_index, edge_attr, batch = data.x, data.edge_index, data.edge_attr, data.batch
 
         # Initialize edge features
-        row, col = edge_index
+        row, _ = edge_index
         h_0 = self.activation_fn(self.edge_init(torch.cat([x[row], edge_attr], dim=1)))
         h = h_0
 
@@ -66,7 +87,7 @@ class GNN(nn.Module):
             h = F.dropout(self.activation_fn(h), self.dropout_ps[l], training=self.training)
 
         # Edge-to-node aggregation
-        s, _ = self.convs[-1](edge_index, h)  # Only for summing
+        s, _ = self.convs[l](edge_index, h)
         q = torch.cat([x, s], dim=1)
         h = self.activation_fn(self.edge_to_node(q))
         
@@ -74,16 +95,32 @@ class GNN(nn.Module):
         return self.ffn(self.pooling_fn(h, batch)).squeeze(-1)
 
 class DMPNNConv(MessagePassing):
-    def __init__(self, hidden_size, aggr='add'):
-        super(DMPNNConv, self).__init__(aggr=aggr)
+    """
+    Implementation of the Direct Message Passing Neural Network
+    logic.
+    """
+    def __init__(self, hidden_size: int, aggr='add'):
+        """
+
+        Args:
+            hidden_size (int): Dimension of hidden layer.
+            aggr (str, optional): Type of message passing aggregation.
+                                  Defaults to 'add'.
+        """
+        super().__init__(aggr=aggr)
+        # Linear transformation for updated messages
         self.lin = nn.Linear(hidden_size, hidden_size)
 
     def forward(self, edge_index, edge_attr):
-        row, col = edge_index
+        row, _ = edge_index
+        # Compute messages and propagate through edges
         a_message = self.propagate(edge_index, x=None, edge_attr=edge_attr)
+        # Reverse message handling for directed edges
         rev_message = torch.flip(edge_attr.view(edge_attr.size(0) // 2, 2, -1), dims=[1]).view(edge_attr.size(0), -1)
 
+        # Return aggregated messages and updated edge features
         return a_message, self.lin(a_message[row] - rev_message)
 
     def message(self, edge_attr):
+        # Pass edge attributes as messages
         return edge_attr

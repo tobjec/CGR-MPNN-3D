@@ -11,38 +11,38 @@ import tqdm
 from wandb_logger import WandBLogger 
 
 class BaseTrainer(metaclass=ABCMeta):
-    '''
-    Base class of all Trainers.
-    '''
+    """
+    Trainer base class
+    """
 
     @abstractmethod
     def train(self) -> None:
-        '''
-        Holds training logic.
-        '''
+        """
+        Overall training logic.
+        """
 
         pass
 
     @abstractmethod
     def _val_epoch(self) -> float:
-        '''
-        Holds validation logic for one epoch.
-        '''
+        """
+        Validation logic for one epoch.
+        """
 
         pass
 
     @abstractmethod
     def _train_epoch(self) -> float:
-        '''
-        Holds training logic for one epoch.
-        '''
+        """
+        Training logic for one epoch.
+        """
 
         pass
 
 
 class RxnGraphTrainer(BaseTrainer):
     """
-    Class that stores the logic for training a model for image classification.
+    Class to train reaction GNN model.
     """
     def __init__(self,
                  name: str, 
@@ -59,30 +59,26 @@ class RxnGraphTrainer(BaseTrainer):
                  num_workers: int = None,
                  val_frequency: int = 5,
                  logger: WandBLogger=None) -> None:
-        '''
-        Args and Kwargs:
-            name (str): Name of the model.
-            model (nn.Module): Deep Network to train
-            optimizer (torch.optim): optimizer used to train the network
-            loss_fn (torch.nn): loss function used to train the network
-            lr_scheduler (torch.optim.lr_scheduler): learning rate scheduler used to train the network
-            train_metric (dlvc.metrics.Accuracy): Accuracy class to get mAcc and mPCAcc of training set
-            val_metric (dlvc.metrics.Accuracy): Accuracy class to get mAcc and mPCAcc of validation set
-            train_data (dlvc.datasets.cifar10.CIFAR10Dataset): Train dataset
-            val_data (dlvc.datasets.cifar10.CIFAR10Dataset): Validation dataset
-            device (torch.device): cuda or cpu - device used to train the network
-            num_epochs (int): number of epochs to train the network
-            training_save_dir (Path): the path to the folder where the best model is stored
-            batch_size (int): number of samples in one batch 
-            val_frequency (int): how often validation is conducted during training (if it is 5 then every 5th 
-                                epoch we evaluate model on validation set)
+        """
+        Constructor for the reaction GNN model trainer. 
 
-        What does it do:
-            - Stores given variables as instance variables for use in other class methods e.g. self.model = model.
-            - Creates data loaders for the train and validation datasets
-            - Optionally use weights & biases for tracking metrics and loss: initializer W&B logger
-
-        '''
+        Args:
+            name (str): Name of the file to be saved. 
+            model (nn.Module): Initialised GNN model.
+            optimizer (torch.optim): Optimizer for the parameter training.
+            loss_fn (torch.nn): Used loss function
+            lr_scheduler (torch.optim.lr_scheduler): Learning rate scheduler.
+            train_data (ChemDataset): Instance of training data class
+            val_data (ChemDataset): Instance of validation data class
+            device (torch.device): Processor to be used for training and evaluation.
+            num_epochs (int): Number of epochs
+            model_save_dir (str, optional): Path to folder where best model is saved.
+                                            Defaults to "saved_models".
+            batch_size (int, optional): Batch size. Defaults to 30.
+            num_workers (int, optional): Number of parallel workers on CPU. Defaults to None.
+            val_frequency (int, optional): Frequency of validation steps. Defaults to 5.
+            logger (WandBLogger, optional): Logger to WandB server. Defaults to None.
+        """
         
         # Data members
         self.name = name
@@ -103,13 +99,14 @@ class RxnGraphTrainer(BaseTrainer):
         self.logger = logger
 
         # Data loaders
-        self.train_loader = tg.loader.DataLoader(train_data, batch_size=batch_size, shuffle=True,
+        self.train_loader = tg.loader.DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True,
                                                         num_workers=self.num_workers, pin_memory=torch.cuda.is_available())
-        self.val_loader = tg.loader.DataLoader(val_data, batch_size=batch_size, shuffle=False,
+        self.val_loader = tg.loader.DataLoader(dataset=val_data, batch_size=batch_size, shuffle=False,
                                                         num_workers=self.num_workers, pin_memory=torch.cuda.is_available())
         
         # Standardizer
-        self.stdizer = Standardizer(self.train_loader)
+        self.stdizer_train = Standardizer(self.train_loader)
+        self.stdizer_val = Standardizer(self.val_loader)
 
         # Wandb logger
         if self.logger:
@@ -118,11 +115,13 @@ class RxnGraphTrainer(BaseTrainer):
 
     def _train_epoch(self, epoch_idx: int) -> float:
         """
-        Training logic for one epoch. 
-        Prints current metrics at end of epoch.
-        Returns loss, mean accuracy and mean per class accuracy for this epoch.
+        Training logic for one epoch
 
-        epoch_idx (int): Current epoch number
+        Args:
+            epoch_idx (int): Current training epoch.
+
+        Returns:
+            float: Root mean square error.
         """
 
         self.model.train()
@@ -132,14 +131,13 @@ class RxnGraphTrainer(BaseTrainer):
             data = data.to(self.device)
             self.optimizer.zero_grad()
             predictions = self.model(data)
-            loss = self.loss_fn(predictions, self.stdizer(data.y))
+            loss = self.loss_fn(predictions, self.stdizer_train(data.y))
             loss.backward()
             self.optimizer.step()
+            total_loss += self.loss_fn(self.stdizer_train(predictions, rev=True), data.y).item()
 
-            batch_size = data.y.size(0)
-            total_loss += self.loss_fn(self.stdizer(predictions, rev=True), data.y).item() * batch_size
         
-        mean_loss = np.sqrt(total_loss / len(self.train_loader))
+        mean_loss = np.sqrt(total_loss / len(self.train_loader.dataset))
 
         if self.logger:
             self.logger.log({"train_loss": mean_loss, "epoch": epoch_idx})
@@ -150,9 +148,13 @@ class RxnGraphTrainer(BaseTrainer):
 
     def _val_epoch(self, epoch_idx: int) -> float:
         """
-        Validation logic for one epoch. 
-        Prints current metrics at end of epoch.
-        Returns loss, mean accuracy and mean per class accuracy for this epoch on the validation data set.
+        Validation logic for one epoch.
+
+        Args:
+            epoch_idx (int): Current epoch.
+
+        Returns:
+            float: Root mean square error
         """
         self.model.eval()
         total_loss = 0.0
@@ -161,13 +163,10 @@ class RxnGraphTrainer(BaseTrainer):
             for data in self.val_loader:
                 data = data.to(self.device)
                 predictions = self.model(data)
-                loss = self.loss_fn(self.stdizer(predictions, rev=True), data.y)
-
-                batch_size = data.y.size(0)
-
-                total_loss += loss.item() * batch_size
+                loss = self.loss_fn(self.stdizer_val(predictions, rev=True), data.y)
+                total_loss += loss.item()
                 
-        mean_loss = np.sqrt(total_loss / len(self.val_loader))
+        mean_loss = np.sqrt(total_loss / len(self.val_loader.dataset))
 
         if self.logger:
             self.logger.log({"val_loss": mean_loss, "epoch": epoch_idx})
@@ -178,14 +177,12 @@ class RxnGraphTrainer(BaseTrainer):
 
     def train(self) -> dict:
         """
-        Full training logic that loops over num_epochs and
-        uses the _train_epoch and _val_epoch methods.
-        Save the model if mean per class accuracy on validation data set is higher
-        than currently saved best mean per class accuracy. 
-        Depending on the val_frequency parameter, validation is not performed every epoch.
-        """
+        Full training and validation logic of the trainer
 
-        # Dictionary to track losses.
+        Returns:
+            dict: Containing the RMSE for the training and validation steps.
+        """
+        
         train_dict = {'train_losses': [], 'val_losses': []}
 
         for epoch_idx in tqdm.tqdm(range(self.num_epochs)):

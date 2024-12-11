@@ -11,18 +11,31 @@ import pandas as pd
 import shutil
 from pathlib import Path
 
-def progress_callback(block_num, block_size, total_size):
-        downloaded = block_num * block_size
-        percent = min(100, (downloaded / total_size) * 100)
-        print(f"\rDownloading: {percent:.2f}% ({downloaded}/{total_size} bytes)", end="")
+def progress_callback(block_num: int, block_size: int, total_size: int) -> None:
+    """
+    Display the progress of a file download as a percentage.
+
+    Args:
+        block_num (int): The current block number being downloaded.
+        block_size (int): The size of each block in bytes.
+        total_size (int): The total size of the file in bytes.
+    """
+    downloaded = block_num * block_size
+    percent = min(100, (downloaded / total_size) * 100)
+    print(f"\rDownloading: {percent:.2f}% ({downloaded}/{total_size} bytes)", end="")
+
 
 def process_rxn_files(base_folder: Path, rxn_range: int) -> tuple:
     """
-    Process .log files in the specified rxn range and generate corresponding .xyz files.
+    Process .log files in the specified reaction range to generate corresponding .xyz files
+    and return lists of ASE atoms for reactants and products.
 
     Args:
-        base_folder (Path): Path to the folder containing rxn directories.
-        rxn_range (int): Range of rxn indices to process.
+        base_folder (Path): Path to the folder containing reaction directories.
+        rxn_range (int): Range of reaction indices to process.
+
+    Returns:
+        tuple: Two lists containing ASE Atoms objects for reactants and products, respectively.
     """
     rrs = []
     pps = []
@@ -42,13 +55,14 @@ def process_rxn_files(base_folder: Path, rxn_range: int) -> tuple:
     
     return rrs, pps
 
-def process_log_to_xyz(log_file: Path, xyz_file: Path):
+def process_log_to_xyz(log_file: Path, xyz_file: Path) -> None:
     """
-    Extract atomic data from a .log file and write to a .xyz file.
+    Extract atomic coordinates and other relevant data from a .log file
+    and write it to a .xyz file.
 
     Args:
-        log_file (Path): Path to the .log file.
-        xyz_file (Path): Path to the .xyz file.
+        log_file (Path): Path to the input .log file.
+        xyz_file (Path): Path to the output .xyz file.
     """
     log_file = Path(log_file)
     xyz_file = Path(xyz_file)
@@ -82,12 +96,31 @@ def process_log_to_xyz(log_file: Path, xyz_file: Path):
 
 
 class PreProcessTransition1x:
+    """
+    Preprocesses the Transition1x dataset, including downloading, extracting,
+    and creating structured data files.
+    """
 
     def __init__(self, fpath_download: str='downloaded_datasets', fpath_processed: str='datasets_test',
                  dlink_transition: str='https://figshare.com/ndownloader/files/36035789/transition1x.h5',
                  dlink_wb97xd3_csv: str='https://zenodo.org/records/3715478/files/wb97xd3.csv',
                  dlink_wb97xd3: str='https://zenodo.org/records/3715478/files/wb97xd3.tar.gz',
                  rxn_range: int=11961, keep_downloads: bool=False):
+        """
+        Args:
+            fpath_download (str, optional): Directory to save downloaded files.
+                                            Defaults to 'downloaded_datasets'.
+            fpath_processed (str, optional): Directory to save processed datasets.
+                                            Defaults to 'datasets_test'.
+            dlink_transition (str, optional): URL for Transition1x data file.
+                                            Defaults to official source.
+            dlink_wb97xd3_csv (str, optional): URL for WB97XD3 CSV file.
+                                            Defaults to official source.
+            dlink_wb97xd3 (str, optional): URL for WB97XD3 tarball file.
+                                        Defaults to official source.
+            rxn_range (int, optional): Number of reactions to process. Defaults to 11961.
+            keep_downloads (bool, optional): Whether to retain downloaded files. Defaults to False
+        """
         
         self.fpath_download = Path(fpath_download)
         self.fpath_processed = Path(fpath_processed)
@@ -101,6 +134,13 @@ class PreProcessTransition1x:
         self.keep_downloads = keep_downloads
 
     def start_data_acquisition(self, data_sets: list=['train', 'val', 'test']):
+        """
+        Orchestrates the entire data acquisition process, including folder creation,
+        file downloads, extraction, and dataset generation.
+
+        Args:
+            data_sets (list, optional): Dataset splits to generate. Defaults to ['train', 'val', 'test'].
+        """
         self.create_folders()
         self.download_files()
         print(f'Start of the extraction of {self.folder_to_extract}')
@@ -109,7 +149,10 @@ class PreProcessTransition1x:
         print('Beginning of the dataset creation.')
         self.create_dataset_files(data_sets)
 
-    def download_files(self):
+    def download_files(self) -> None:
+        """
+        Downloads required dataset files from predefined URLs if not already present.
+        """
         
         for url in [self.dlink_transition, self.dlink_wb97xd3, self.dlink_wb97xd3_csv]:
             
@@ -122,7 +165,10 @@ class PreProcessTransition1x:
                 urllib.request.urlretrieve(url, file_path.as_posix(), reporthook=progress_callback)
                 print(f'Finished downloading: {filename}', end='\n\n')
         
-    def extract_files(self):
+    def extract_files(self) -> None:
+        """
+        Extracts compressed files downloaded for processing.
+        """
 
         filenames = [os.path.basename(file) for file in [os.path.basename(self.dlink_wb97xd3)]]
         for filename in filenames:
@@ -131,7 +177,13 @@ class PreProcessTransition1x:
             shutil.unpack_archive(fpath, folder_to_extract)
             print(f'File {filename} extracted to {folder_to_extract.as_posix()}')
     
-    def create_dataset_files(self, data_sets: list):
+    def create_dataset_files(self, data_sets: list) -> None:
+        """
+        Processes reaction files, generates .xyz files, and creates datasets for specified splits.
+
+        Args:
+            data_sets (list): Dataset splits to process, e.g., ['train', 'val', 'test'].
+        """
         
         rrs, pps = process_rxn_files(self.folder_to_extract, self.rxn_range)
         d = pd.read_csv(self.fpath_wb97xd3_csv)
@@ -177,7 +229,10 @@ class PreProcessTransition1x:
         if not self.keep_downloads: shutil.rmtree(self.fpath_download)
              
 
-    def create_folders(self):
+    def create_folders(self) -> None:
+        """
+        Creates necessary directories for storing downloaded and processed files if they don't exist.
+        """
         
         if not self.fpath_processed.exists(): self.fpath_processed.mkdir(parents=True)
         if not self.fpath_download.exists(): self.fpath_download.mkdir(parents=True)
