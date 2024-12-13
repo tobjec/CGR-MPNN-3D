@@ -15,7 +15,7 @@ class ChemDataset(Dataset):
         mode (str, optional): Processing mode ('mol' for molecules or 'rxn' for reactions). Defaults to 'rxn'.
     """
 
-    def __init__(self, data_path: str, mode: str = 'rxn'):
+    def __init__(self, data_path: str, mode: str = 'rxn', data_npz_path: str = None):
         """
         Initializes the dataset by reading the data, setting the mode, and preparing for graph generation.
 
@@ -29,6 +29,14 @@ class ChemDataset(Dataset):
         self.labels = data_df.iloc[:, 1].values.astype(np.float32)  # Corresponding labels
         self.mode = mode  # Mode of processing: 'mol' or 'rxn'
         self.graph_dict = {}  # Cache for processed graph representations
+        self.use_npz = False
+        self.smi = None
+        if data_npz_path:
+            self.use_npz = True
+            self.mace_features = {}
+            with np.load(data_npz_path) as npz_data:
+                for key in npz_data.files:
+                    self.mace_features[key] = npz_data[key]
 
     def process_key(self, key: int) -> tg.data.Data:
         """
@@ -40,20 +48,20 @@ class ChemDataset(Dataset):
         Returns:
             tg.data.Data: A PyTorch geometric Data object representing the molecule/reaction graph.
         """
-        smi = self.smiles[key]
-        if smi not in self.graph_dict:
+        self.smi = self.smiles[key]
+        if self.smi not in self.graph_dict:
             # Generate a graph depending on the processing mode
             if self.mode == 'mol':
-                molgraph = MolGraph(smi)
+                molgraph = MolGraph(self.smi)
             elif self.mode == 'rxn':
-                molgraph = RxnGraph(smi)
+                molgraph = RxnGraph(self.smi)
             else:
                 raise ValueError("Unknown option for mode", self.mode)
             # Convert the graph to PyTorch geometric Data
             mol = self.molgraph2data(molgraph, key)
-            self.graph_dict[smi] = mol
+            self.graph_dict[self.smi] = mol
         else:
-            mol = self.graph_dict[smi]
+            mol = self.graph_dict[self.smi]
         return mol
 
     def molgraph2data(self, molgraph: RxnGraph | MolGraph, key: int) -> tg.data.Data:
@@ -69,6 +77,10 @@ class ChemDataset(Dataset):
         """
         data = tg.data.Data()
         data.x = torch.tensor(molgraph.f_atoms, dtype=torch.float)  # Atomic features
+        if self.use_npz:
+            arr_key = key if key >= 0 else len(self.smiles)-key
+            mace_feature = torch.from_numpy(self.mace_features[f"arr_{arr_key}"])
+            data.x = torch.concatenate([data.x, mace_feature], dim=1)
         data.edge_index = torch.tensor(molgraph.edge_index, dtype=torch.long).t().contiguous()  # Edge connections
         data.edge_attr = torch.tensor(molgraph.f_bonds, dtype=torch.float)  # Bond features
         data.y = torch.tensor([self.labels[key]], dtype=torch.float)  # Target label

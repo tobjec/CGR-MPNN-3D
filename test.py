@@ -6,7 +6,7 @@ import numpy as np
 from pathlib import Path
 import os
 
-from cgr_mpnn_3D.models.CGR import GNN
+from cgr_mpnn_3D.models.GNN import GNN
 from cgr_mpnn_3D.data.ChemDataset import ChemDataset
 from cgr_mpnn_3D.utils.json_dumper import json_dumper
 from cgr_mpnn_3D.utils.standardizer import Standardizer
@@ -40,9 +40,19 @@ def test(name: str, path_trained_model: str, data_path: str = 'datasets', gpu_id
     if data_sets:
         PreProcessTransition1x().start_data_acquisition(data_sets)
 
-    # Load test dataset
-    test_data = ChemDataset(data_path_test)
-
+    # Initialize the model based on the name
+    match name:
+        case 'CGR':
+            # Load test dataset
+            test_data = ChemDataset(data_path_test)
+        case 'CGR-MPNN-3D':
+            # Define the path to the test dataset
+            data_path_test_npz = Path(data_path) / 'test.npz'
+            # Load test dataset
+            test_data = ChemDataset(data_path_test, data_npz_path=data_path_test_npz.as_posix())
+        case _:
+            raise NameError(f"Unknown model with name '{name}'.")
+    
     # Initialize data loader for the test set
     test_data_loader = tg.loader.DataLoader(
         test_data, shuffle=False, num_workers=os.cpu_count() // 2,
@@ -51,18 +61,8 @@ def test(name: str, path_trained_model: str, data_path: str = 'datasets', gpu_id
 
     # Initialize standardizer for the dataset
     stdizer = Standardizer(test_data_loader)
-
-    # Initialize the model based on the name
-    match name:
-        case 'CGR':
-            model = GNN(
-                in_channels=test_data[0].num_node_features,
-                edge_features=test_data[0].num_edge_features
-            )
-        case 'CGR_MPNN_3D':
-            raise NotImplementedError("Model 'CGR_MPNN_3D' initialization is not implemented.")
-        case _:
-            raise NameError(f"Unknown model with name '{name}'.")
+    
+    model = GNN(test_data[0].num_node_features, test_data[0].num_edge_features)
 
     # Load the trained model's weights
     state_dict = torch.load(path_trained_model, map_location='cpu')

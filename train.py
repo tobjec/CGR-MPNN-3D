@@ -5,8 +5,7 @@ import torch.nn.functional as F
 from pathlib import Path
 import os
 
-from cgr_mpnn_3D.models.CGR import GNN
-from cgr_mpnn_3D.models.CGR_MPNN_3D import GNN2
+from cgr_mpnn_3D.models.GNN import GNN
 from cgr_mpnn_3D.data.ChemDataset import ChemDataset
 from cgr_mpnn_3D.training.trainer import RxnGraphTrainer
 from cgr_mpnn_3D.utils.json_dumper import json_dumper
@@ -73,14 +72,28 @@ def train(name: str,
     if data_sets:
         PreProcessTransition1x().start_data_acquisition(data_sets)
 
-    # Load the training and validation datasets
-    train_data = ChemDataset(data_path_train.as_posix())
-    val_data = ChemDataset(data_path_val.as_posix())
-
     # Initialize the model based on the name
     match name.split('_')[0]:
         case 'CGR':
-            model = GNN(
+            # Load the training and validation datasets
+            train_data = ChemDataset(data_path_train.as_posix())
+            val_data = ChemDataset(data_path_val.as_posix())
+        case 'CGR-MPNN-3D':
+            # Define paths to the training and validation datasets
+            data_path_train_npz = Path(data_path) / 'train.npz'
+            data_path_val_npz = Path(data_path) / 'val.npz'
+            # Load the training and validation datasets
+            train_data = ChemDataset(data_path_train.as_posix(),
+                                     data_npz_path=data_path_train_npz.as_posix())
+            val_data = ChemDataset(data_path_val.as_posix(),
+                                   data_npz_path=data_path_val_npz.as_posix())
+            
+        case _:
+            raise NameError(f"Unknown model with name '{name}'.")
+        
+    print(name.split('_')[0], train_data[0].num_node_features, train_data[0].num_edge_features)
+
+    model = GNN(
                 train_data[0].num_node_features,
                 train_data[0].num_edge_features,
                 depth=depth,
@@ -89,13 +102,6 @@ def train(name: str,
                 activation_fn=activation_fn,
                 use_learnable_skip=use_learnable_skip
             )
-        case 'CGR_MPNN_3D':
-            model = GNN2(
-                train_data[0].num_node_features,
-                train_data[0].num_edge_features
-            )
-        case _:
-            raise NameError(f"Unknown model with name '{name}'.")
 
     # Set up the device for training
     device = torch.device(f'cuda:{gpu_id}' if torch.cuda.is_available() else 'cpu')
@@ -121,7 +127,7 @@ def train(name: str,
         val_data=val_data,
         device=device,
         num_epochs=num_epochs,
-        save_path=save_path,
+        model_save_dir=save_path,
         batch_size=batch_size,
         logger=logger
     )
@@ -134,7 +140,7 @@ def train(name: str,
 if __name__ == "__main__":
 
     args = argparse.ArgumentParser(description='CLI tool for training the CGR MPNN 3D Graph Neural Network.')
-    args.add_argument('-n', '--name', default='CGR', choices=['CGR', 'CGR_MPNN_3D'], type=str,
+    args.add_argument('-n', '--name', default='CGR', choices=['CGR', 'CGR-MPNN-3D'], type=str,
                       help='Type of the model to be trained')
     args.add_argument('-d', '--depth', default=3, type=int, help='Depth of GNN')
     args.add_argument('-hs', '--hidden_sizes', default=[300, 300, 300], nargs='+', type=int,
@@ -172,7 +178,8 @@ if __name__ == "__main__":
                                             'batch_size': args.batch_size, 'gamma': args.gamma}}}
     
     wandb_config = result_metadata_dict[name]['metadata']
-    logger = WandBLogger(config=wandb_config)
+    #logger = WandBLogger(config=wandb_config)
+    logger = None
 
     print('Metadata of the training:')
     for key,value in wandb_config.items():
@@ -193,7 +200,7 @@ if __name__ == "__main__":
     train_result = train(name, args.depth, args.hidden_sizes, args.dropout_ps, args.activation_fn, args.save_path,
                          args.learnable_skip, args.learning_rate, args.num_epochs, args.weight_decay,
                          args.batch_size, args.gamma, args.data_path, args.gpu_id, logger)
-    test_result = test(f"{args.save_path}/{name}.pth")
+    test_result = test(args.name, f"{args.save_path}/{name}.pth")
     
     result_metadata_dict[name].update(**train_result)
     result_metadata_dict[name].update(**test_result)

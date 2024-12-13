@@ -1,5 +1,6 @@
 import urllib.request
 import numpy as np
+import torch
 from transition1x import Dataloader
 from tqdm import tqdm
 import os
@@ -10,6 +11,8 @@ from ase.calculators.singlepoint import SinglePointCalculator
 import pandas as pd
 import shutil
 from pathlib import Path
+from rdkit import Chem
+from mace.calculators import mace_mp
 
 def progress_callback(block_num: int, block_size: int, total_size: int) -> None:
     """
@@ -93,6 +96,39 @@ def process_log_to_xyz(log_file: Path, xyz_file: Path) -> None:
     
     except Exception as e:
         print(f"Error processing {log_file}: {e}")
+
+def process_xyz_to_npz(csv_file: Path, xyz_file: Path, npz_file: Path) -> None:
+    """
+    Process atomic coordinates from a .xyz file, align them with SMILES strings in a CSV file,
+    and save the resulting molecular descriptors to a .npz file.
+
+    Args:
+        csv_file (Path): Path to the CSV file containing SMILES strings.
+        xyz_file (Path): Path to the input .xyz file with atomic coordinates.
+        npz_file (Path): Path to the output .npz file for saving molecular descriptors.
+    """
+    params = Chem.SmilesParserParams()
+    params.removeHs = False
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    #macemp = MACECalculator(model_paths=[mace_model_params_path],
+    #                        device=device, default_dtype="float32")
+    macemp = mace_mp(model="small", device=device)
+    xyz_structures = []
+
+    for atoms in tqdm(ase.io.iread(xyz_file.as_posix()), desc="Extract MACE features", dynamic_ncols=True):
+        xyz_structures.append(macemp.get_descriptors(atoms))
+
+    smiles = pd.read_csv(csv_file.as_posix())
+    features = []
+
+    for i in range(len(smiles)):
+        rsmi = smiles['smiles'][i].split('>')[0]
+        r = Chem.MolFromSmiles(rsmi, params)
+        ridx = np.array([a.GetAtomMapNum()-1 for a in r.GetAtoms()])
+        concat = [xyz_structures[3*i][ridx,:], xyz_structures[3*i+1][ridx,:], xyz_structures[3*i+2][ridx,:]]
+        features.append(np.concatenate(concat, axis=1))
+
+    np.savez(npz_file.as_posix(), *features)
 
 
 class PreProcessTransition1x:
@@ -225,6 +261,10 @@ class PreProcessTransition1x:
             ase.io.write(self.fpath_processed / f'{split}.xyz', all_structures)
             frame = pd.DataFrame(list(zip(rxns,e_a)), columns=['smiles','ea'])
             frame.to_csv(self.fpath_processed / f'{split}.csv', index=False)
+
+            process_xyz_to_npz((self.fpath_processed / f'{split}.csv').as_posix(),
+                               (self.fpath_processed / f'{split}.xyz').as_posix(),
+                               (self.fpath_processed / f'{split}.npz').as_posix())
         
         if not self.keep_downloads: shutil.rmtree(self.fpath_download)
              
