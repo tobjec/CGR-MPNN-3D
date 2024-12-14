@@ -78,7 +78,7 @@ python train.py \
   `--use_logger` (str): Whether to use a WandB logger or not (default: `False`).
 
 #### Example Output
-Training results will be logged, and the trained model will be saved in the specified `--save_path` directory. Hyperparameter metadata and test results will be dumped into a JSON file.
+The required datasets will be downloaded and processed automatically if not available. Training results will be logged, and the trained model will be saved in the specified `--save_path` directory. Hyperparameter metadata and test results will be dumped into a JSON file.
 
 ### Testing
 To test the model, use the following CLI:
