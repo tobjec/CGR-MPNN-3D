@@ -103,4 +103,32 @@ The test loss (RMSE) will be printed, and results can be optionally saved in a J
 
 The error metric used for this project is the Mean Squared Error (MSE) between predicted and true activation energies.
 
+#### Target Metric
+
+The target for this metric was an MSE of **12.3 kcal/mol**, which was determined based on the benchmark reference model without using the 3D descriptors.
+
+#### Achieved Metric
+
+The achieved MAE after training for the 3D-enhanced model was **8.6 kcal/mol**, surpassing the target value.
+
+## Work Breakdown and Time Tracking
+
+Below is the time spent on each task:
+
+| Task | Planned Time (h) | Actual Time (h) |
+|----------|----------|----------|
+| Literature Review   | 8   | 12  |
+| Dataset Preprocessing | 5   | 10  |
+| Pipeline Implementation | 15 | 22 |
+| MACE Integration | 8 | 10 |
+| Training and Evaluation | 15 | 8 |
+| Documentation | 4 | 7 |
+|**Total** | 55 | 69 |
+
+## Deviation from Submitted Project Plan
+
+Due to some weird error regarding the MACE finetuning CLI the force field model couldn't be finetuned to the training data from T1x dataset yet. To be continued.
+
+
+
 
