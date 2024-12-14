@@ -141,25 +141,28 @@ if __name__ == "__main__":
 
     args = argparse.ArgumentParser(description='CLI tool for training the CGR MPNN 3D Graph Neural Network.')
     args.add_argument('-n', '--name', default='CGR', choices=['CGR', 'CGR-MPNN-3D'], type=str,
-                      help='Type of the model to be trained')
+                  help='Type of the model to be trained')
     args.add_argument('-d', '--depth', default=3, type=int, help='Depth of GNN')
-    args.add_argument('-hs', '--hidden_sizes', default=[300, 300, 300], nargs='+', type=int,
-                      help='Size of hidden layers')
-    args.add_argument('-ds', '--dropout_ps', default=[0.02, 0.02, 0.02], nargs='+', type=float,
-                      help='Dropout probability of the hidden layers')
+    args.add_argument('--hidden_sizes', default=[300, 300, 300], nargs='+', type=int,
+                    help='Size of hidden layers')
+    args.add_argument('--dropout_ps', default=[0.02, 0.02, 0.02], nargs='+', type=float,
+                    help='Dropout probability of the hidden layers')
     args.add_argument('-af', '--activation_fn', default='ReLU', choices=['ReLU', 'SiLU', 'GELU'], type=str,
-                      help='Activation function for the GNN')
-    args.add_argument('-sp', '--save_path', default='saved_models', type=str, help='Path to the saved model parameters')
-    args.add_argument('-ls', '--learnable_skip', default='False', choices=['True', 'False'],
-                      type=str, help='Using of learnable skip connections')
+                    help='Activation function for the GNN')
+    args.add_argument('--save_path', default='saved_models', type=str, help='Path to the saved model parameters')
+    args.add_argument('--learnable_skip', default='False', choices=['True', 'False'], type=str,
+                    help='Using of learnable skip connections')
     args.add_argument('-lr', '--learning_rate', default=1e-3, type=float, help='Learning rate for the GNN')
     args.add_argument('-ne', '--num_epochs', default=30, type=int, help='Number of training epochs')
-    args.add_argument('-wd', '--weight_decay', default=0, type=float, help='Weight decay regularization for the optimizer')
+    args.add_argument('--weight_decay', default=0, type=float, help='Weight decay regularization for the optimizer')
     args.add_argument('-bs', '--batch_size', default=32, type=int, help='Batch size of the training data')
     args.add_argument('-g', '--gamma', default=1, type=float, help='Gamma value for the learning rate scheduler')
-    args.add_argument('-dp', '--data_path', default='datasets', type=str, help='Path to .csv data sets')
-    args.add_argument('-gid', '--gpu_id', default=0, type=int, help='Index of which GPU to use')
-    args.add_argument('-fp', '--file_path', default='parameter_study.json', type=str, help='Filename to training outcomes')
+    args.add_argument('--data_path', default='datasets', type=str, help='Path to .csv data sets')
+    args.add_argument('--gpu_id', default=0, type=int, help='Index of which GPU to use')
+    args.add_argument('--file_path', default='parameter_study.json', type=str, help='Filename to training outcomes')
+    args.add_argument('--use_logger', default='False', choices=['True', 'False'], type=str, help='Whether to use WandB logger or not. '+
+                                                                     'Has to be configured in the wandb_logger.py file.')
+
     
     args = args.parse_args()
 
@@ -177,9 +180,12 @@ if __name__ == "__main__":
                                             'num_epochs': args.num_epochs, 'weight_decay': args.weight_decay,
                                             'batch_size': args.batch_size, 'gamma': args.gamma}}}
     
-    wandb_config = result_metadata_dict[name]['metadata']
-    #logger = WandBLogger(config=wandb_config)
-    logger = None
+    args.use_logger = True if args.use_logger=='True' else 'False'
+    if args.use_logger:
+        wandb_config = result_metadata_dict[name]['metadata']
+        logger = WandBLogger(config=wandb_config)
+    else:
+        logger = None
 
     print('Metadata of the training:')
     for key,value in wandb_config.items():

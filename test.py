@@ -99,10 +99,10 @@ def test(name: str, path_trained_model: str, data_path: str = 'datasets', gpu_id
 if __name__ == "__main__":
 
     args = argparse.ArgumentParser(description='CLI tool for testing the CGR MPNN 3D Graph Neural Network.')
-    args.add_argument('-pm', '--path_trained_model', help='Path to trained model to be tested')
-    args.add_argument('-dp', '--data_path', default='datasets', type=str, help='Path to .csv data sets')
-    args.add_argument('-sr', '--save_result', default='False', choices=['True', 'False'], type=str, help='Flag to save test result')
-    args.add_argument('-gid', '--gpu_id', default='0', type=str,
+    args.add_argument('--path_trained_model', help='Path to trained model to be tested')
+    args.add_argument('--data_path', default='datasets', type=str, help='Path to .csv data sets')
+    args.add_argument('--save_result', default='False', choices=['True', 'False'], type=str, help='Flag to save test result')
+    args.add_argument('--gpu_id', default='0', type=str,
                       help='Index of which GPU to use')
     
     args = args.parse_args()

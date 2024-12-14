@@ -165,13 +165,15 @@ datasets/test.xyz
 datasets/test.csv
 
 # Hyperparameter tuning folders
-hyperparameter_study/
+hyperparameter_study/CGR*
 
 # WandB related folders
 wandb/
 
 # Saved models
 saved_models/
+
+mace/
 
 Example.ipynb
 mace_finetune.py

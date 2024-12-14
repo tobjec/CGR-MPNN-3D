@@ -1,6 +1,5 @@
 import wandb
 import argparse
-from wandb_logger import WandBLogger
 import torch.nn.functional as F
 from train import train
 import json
@@ -13,11 +12,7 @@ def train_with_sweeps():
     and trains a model based on the provided hyperparameters. Metrics are logged 
     during training and the run is finalized at the end.
     """
-    wandb.init(
-        entity="tobjec",
-        project="CGR-MPNN-3D",
-        group="tuw"
-    )
+    wandb.init()
 
     # Retrieve the configuration from wandb
     config = wandb.config
@@ -40,18 +35,15 @@ def train_with_sweeps():
         gpu_id=config.gpu_id
     )
 
-    # Extract training and validation losses from the training results
     train_losses = train_result.get("train_losses", [])
     val_losses = train_result.get("val_losses", [])
 
-    # Log training and validation losses epoch by epoch
     for epoch, train_loss in enumerate(train_losses):
         wandb.log({
             "epoch": epoch + 1,
             "train_loss": train_loss
         })
 
-        # Log validation loss every 5 epochs or at the end
         if epoch % 5 == 0 or epoch == len(train_losses) - 1:
             val_loss_index = epoch // 5 if epoch % 5 == 0 else len(val_losses) - 1
             wandb.log({
@@ -62,17 +54,30 @@ def train_with_sweeps():
     # Finalize the wandb run
     wandb.finish()
 
-
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='CLI for conducting hyperparameter tuning')
+    parser.add_argument('-e', '--entity', default='tobjec', type=str, 
+                        help='Weights & Biases entity name (default: tobjec)')
+    parser.add_argument('-pr', '--project', default='CGR-MPNN-3D', type=str, 
+                        help='Weights & Biases project name (default: CGR-MPNN-3D)')
+    parser.add_argument('-g', '--group', default='tuw', type=str, 
+                        help='Group name for the sweep (default: tuw)')
+    parser.add_argument('-p', '--path_input_file', default='hyperparameter_study/sweep_config.json',
+                        help='Path to the config file (default: hyperparameter_study/sweep_config.json)')
+    parser.add_argument('-c', '--count', default=20, type=int, 
+                        help='Number of sweep runs (default: 20)')
 
-    args = argparse.ArgumentParser(description='CLI for conducting hyperparameter tuning')
-    args.add_argument('-p', '--path_input_file', default='hyperparameter_study/sweep_config.json',
-                      help='Path to the config file')
-    args = args.parse_args()
+    args = parser.parse_args()
 
     with open(args.path_input_file, "r") as f:
         sweep_config = json.load(f)
 
-    sweep_id = wandb.sweep(sweep_config, project="CGR-MPNN-3D", entity="tobjec")
+    sweep_config['entity'] = args.entity
+    sweep_config['project'] = args.project
+    sweep_config['group'] = args.group
 
-    wandb.agent(sweep_id, function=train_with_sweeps, count=20)
+    # Initialize the sweep and get the sweep ID
+    sweep_id = wandb.sweep(sweep_config, project=args.project, entity=args.entity)
+
+    # Start the wandb agent for the sweep
+    wandb.agent(sweep_id, function=train_with_sweeps, count=args.count)

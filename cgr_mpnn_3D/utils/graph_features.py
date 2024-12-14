@@ -157,7 +157,7 @@ class RxnGraph:
         # Process atoms and bonds for reactants and products
         for a1 in range(n_atoms):
             f_atom_reac = atom_features(mol_reac.GetAtomWithIdx(a1))
-            f_atom_prod = atom_features(mol_prod.GetAtomWithIdx(a1))
+            f_atom_prod = atom_features(mol_prod.GetAtomWithIdx(ri2pi[a1]))
             f_atom_diff = [y - x for x, y in zip(f_atom_reac, f_atom_prod)]
             f_atom = f_atom_reac + f_atom_diff
             self.f_atoms.append(f_atom)
