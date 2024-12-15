@@ -106,11 +106,11 @@ The error metric used for this project is the Mean Squared Error (MSE) between p
 
 #### Target Metric
 
-The target for this metric was an MSE of **12.3 kcal/mol**, which was determined based on the benchmark reference model without using the 3D descriptors.
+The target for this metric was an testing RMSE of **11.18 kcal/mol**, which was determined based on the benchmark reference model without using the 3D descriptors.
 
 #### Achieved Metric
 
-The achieved MAE after training for the 3D-enhanced model was **8.6 kcal/mol**, surpassing the target value.
+The achieved testing RMSE for the 3D-enhanced model was **7.42 kcal/mol**, surpassing the target value.
 
 ## Work Breakdown and Time Tracking
 
