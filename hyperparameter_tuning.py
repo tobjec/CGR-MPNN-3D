@@ -64,7 +64,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-pr",
         "--project",
-        default="CGR-MPNN-3D",
+        default="CGR-FINAL",
         type=str,
         help="Weights & Biases project name (default: CGR-MPNN-3D)",
     )
