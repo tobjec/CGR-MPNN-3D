@@ -2,6 +2,7 @@ import torch_geometric as tg
 import numpy as np
 from numpy.typing import ArrayLike
 
+
 class Standardizer:
     """
     Class to calculate the mean and the standard deviation
@@ -11,12 +12,16 @@ class Standardizer:
     def __init__(self, dataloader: tg.loader.DataLoader):
         """
         Args:
-            dataloader (tg.loader.DataLoader): Dataloader to 
+            dataloader (tg.loader.DataLoader): Dataloader to
                                                extract data set.
         """
-        self.mean = np.mean(dataloader.dataset.labels)
-        self.std = np.std(dataloader.dataset.labels)
-    
+        try:
+            self.mean = np.mean(dataloader.dataset.labels)
+            self.std = np.std(dataloader.dataset.labels)
+        except AttributeError:
+            self.mean = np.mean([data.y for data in dataloader.dataset], axis=0)
+            self.std = np.std([data.y for data in dataloader.dataset], axis=0)
+            
     def __call__(self, x: ArrayLike, rev=False) -> ArrayLike:
         """
         Args:
@@ -25,6 +30,6 @@ class Standardizer:
                                   Defaults to False.
 
         Returns:
-            ArrayLike: Processed array 
+            ArrayLike: Processed array
         """
-        return (x-self.mean)/self.std if not rev else (x*self.std)+self.mean
+        return (x - self.mean) / self.std if not rev else (x * self.std) + self.mean

@@ -14,21 +14,23 @@ from wandb_logger import WandBLogger
 from test import test
 
 
-def train(name: str, 
-          depth: int = 3, 
-          hidden_sizes: list = [300, 300, 300], 
-          dropout_ps: list = [0.02, 0.02, 0.02],
-          activation_fn: F = F.relu, 
-          save_path: str = 'saved_models', 
-          use_learnable_skip: bool = False,
-          lr: float = 1e-3, 
-          num_epochs: int = 30, 
-          weight_decay: float = 0, 
-          batch_size: int = 32,
-          gamma: float = 1, 
-          data_path: str = 'datasets', 
-          gpu_id: int = 0, 
-          logger: WandBLogger = None) -> dict:
+def train(
+    name: str,
+    depth: int = 3,
+    hidden_sizes: list = [300, 300, 300],
+    dropout_ps: list = [0.02, 0.02, 0.02],
+    activation_fn: F = F.relu,
+    save_path: str = "saved_models",
+    use_learnable_skip: bool = False,
+    lr: float = 1e-3,
+    num_epochs: int = 30,
+    weight_decay: float = 0,
+    batch_size: int = 32,
+    gamma: float = 1,
+    data_path: str = "datasets",
+    gpu_id: int = 0,
+    logger: WandBLogger = None,
+) -> dict:
     """
     Train a specified model on the training dataset and validate on a validation dataset.
 
@@ -54,66 +56,74 @@ def train(name: str,
     """
 
     # Define paths to the training and validation datasets
-    data_path_train = Path(data_path) / 'train.csv'
-    data_path_val = Path(data_path) / 'val.csv'
+    data_path_train = Path(data_path) / "train.csv"
+    data_path_val = Path(data_path) / "val.csv"
 
     # Check for the presence of datasets
     data_sets = []
     if not data_path_train.exists():
-        data_sets.append('train')
+        data_sets.append("train")
     else:
-        print('Train data set found at', data_path_train)
+        print("Train data set found at", data_path_train)
 
     if not data_path_val.exists():
-        data_sets.append('val')
+        data_sets.append("val")
     else:
-        print('Validation data set found at', data_path_val)
+        print("Validation data set found at", data_path_val)
 
     if data_sets:
         PreProcessTransition1x().start_data_acquisition(data_sets)
 
     # Initialize the model based on the name
-    match name.split('_')[0]:
-        case 'CGR':
+    match name.split("_")[0]:
+        case "CGR":
             # Load the training and validation datasets
             train_data = ChemDataset(data_path_train.as_posix())
             val_data = ChemDataset(data_path_val.as_posix())
-        case 'CGR-MPNN-3D':
+        case "CGR-MPNN-3D":
             # Define paths to the training and validation datasets
-            data_path_train_npz = Path(data_path) / 'train.npz'
-            data_path_val_npz = Path(data_path) / 'val.npz'
+            data_path_train_npz = Path(data_path) / "train.npz"
+            data_path_val_npz = Path(data_path) / "val.npz"
             # Load the training and validation datasets
-            train_data = ChemDataset(data_path_train.as_posix(),
-                                     data_npz_path=data_path_train_npz.as_posix())
-            val_data = ChemDataset(data_path_val.as_posix(),
-                                   data_npz_path=data_path_val_npz.as_posix())
-            
-        case _:
-            raise NameError(f"Unknown model with name '{name}'.")
-        
-    print(name.split('_')[0], train_data[0].num_node_features, train_data[0].num_edge_features)
-
-    model = GNN(
-                train_data[0].num_node_features,
-                train_data[0].num_edge_features,
-                depth=depth,
-                hidden_sizes=hidden_sizes,
-                dropout_ps=dropout_ps,
-                activation_fn=activation_fn,
-                use_learnable_skip=use_learnable_skip
+            train_data = ChemDataset(
+                data_path_train.as_posix(), data_npz_path=data_path_train_npz.as_posix()
+            )
+            val_data = ChemDataset(
+                data_path_val.as_posix(), data_npz_path=data_path_val_npz.as_posix()
             )
 
+        case _:
+            raise NameError(f"Unknown model with name '{name}'.")
+
+    print(
+        name.split("_")[0],
+        train_data[0].num_node_features,
+        train_data[0].num_edge_features,
+    )
+
+    model = GNN(
+        train_data[0].num_node_features,
+        train_data[0].num_edge_features,
+        depth=depth,
+        hidden_sizes=hidden_sizes,
+        dropout_ps=dropout_ps,
+        activation_fn=activation_fn,
+        use_learnable_skip=use_learnable_skip,
+    )
+
     # Set up the device for training
-    device = torch.device(f'cuda:{gpu_id}' if torch.cuda.is_available() else 'cpu')
+    device = torch.device(f"cuda:{gpu_id}" if torch.cuda.is_available() else "cpu")
     if torch.cuda.is_available():
-        print(f'Starting training on CUDA:{gpu_id}.')
+        print(f"Starting training on CUDA:{gpu_id}.")
     else:
-        print('Starting training on CPU.')
+        print("Starting training on CPU.")
     model.to(device)
 
     # Define the optimizer and learning rate scheduler
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay, amsgrad=True)
-    loss_fn = torch.nn.MSELoss(reduction='sum')
+    optimizer = torch.optim.Adam(
+        model.parameters(), lr=lr, weight_decay=weight_decay, amsgrad=True
+    )
+    loss_fn = torch.nn.MSELoss(reduction="sum")
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=gamma)
 
     # Initialize the trainer
@@ -129,90 +139,195 @@ def train(name: str,
         num_epochs=num_epochs,
         model_save_dir=save_path,
         batch_size=batch_size,
-        logger=logger
+        logger=logger,
     )
 
     # Start training and return the results
     return trainer.train()
 
 
-
 if __name__ == "__main__":
 
-    args = argparse.ArgumentParser(description='CLI tool for training the CGR MPNN 3D Graph Neural Network.')
-    args.add_argument('-n', '--name', default='CGR', choices=['CGR', 'CGR-MPNN-3D'], type=str,
-                  help='Type of the model to be trained')
-    args.add_argument('-d', '--depth', default=3, type=int, help='Depth of GNN')
-    args.add_argument('--hidden_sizes', default=[300, 300, 300], nargs='+', type=int,
-                    help='Size of hidden layers')
-    args.add_argument('--dropout_ps', default=[0.02, 0.02, 0.02], nargs='+', type=float,
-                    help='Dropout probability of the hidden layers')
-    args.add_argument('-af', '--activation_fn', default='ReLU', choices=['ReLU', 'SiLU', 'GELU'], type=str,
-                    help='Activation function for the GNN')
-    args.add_argument('--save_path', default='saved_models', type=str, help='Path to the saved model parameters')
-    args.add_argument('--learnable_skip', default='False', choices=['True', 'False'], type=str,
-                    help='Using of learnable skip connections')
-    args.add_argument('-lr', '--learning_rate', default=1e-3, type=float, help='Learning rate for the GNN')
-    args.add_argument('-ne', '--num_epochs', default=30, type=int, help='Number of training epochs')
-    args.add_argument('--weight_decay', default=0, type=float, help='Weight decay regularization for the optimizer')
-    args.add_argument('-bs', '--batch_size', default=32, type=int, help='Batch size of the training data')
-    args.add_argument('-g', '--gamma', default=1, type=float, help='Gamma value for the learning rate scheduler')
-    args.add_argument('--data_path', default='datasets', type=str, help='Path to .csv data sets')
-    args.add_argument('--gpu_id', default=0, type=int, help='Index of which GPU to use')
-    args.add_argument('--file_path', default='parameter_study.json', type=str, help='Filename to training outcomes')
-    args.add_argument('--use_logger', default='False', choices=['True', 'False'], type=str, help='Whether to use WandB logger or not. '+
-                                                                     'Has to be configured in the wandb_logger.py file.')
+    args = argparse.ArgumentParser(
+        description="CLI tool for training the CGR MPNN 3D Graph Neural Network."
+    )
+    args.add_argument(
+        "-n",
+        "--name",
+        default="CGR",
+        choices=["CGR", "CGR-MPNN-3D"],
+        type=str,
+        help="Type of the model to be trained",
+    )
+    args.add_argument("-d", "--depth", default=3, type=int, help="Depth of GNN")
+    args.add_argument(
+        "--hidden_sizes",
+        default=[300, 300, 300],
+        nargs="+",
+        type=int,
+        help="Size of hidden layers",
+    )
+    args.add_argument(
+        "--dropout_ps",
+        default=[0.02, 0.02, 0.02],
+        nargs="+",
+        type=float,
+        help="Dropout probability of the hidden layers",
+    )
+    args.add_argument(
+        "-af",
+        "--activation_fn",
+        default="ReLU",
+        choices=["ReLU", "SiLU", "GELU"],
+        type=str,
+        help="Activation function for the GNN",
+    )
+    args.add_argument(
+        "--save_path",
+        default="saved_models",
+        type=str,
+        help="Path to the saved model parameters",
+    )
+    args.add_argument(
+        "--learnable_skip",
+        default="False",
+        choices=["True", "False"],
+        type=str,
+        help="Using of learnable skip connections",
+    )
+    args.add_argument(
+        "-lr",
+        "--learning_rate",
+        default=1e-3,
+        type=float,
+        help="Learning rate for the GNN",
+    )
+    args.add_argument(
+        "-ne", "--num_epochs", default=30, type=int, help="Number of training epochs"
+    )
+    args.add_argument(
+        "--weight_decay",
+        default=0,
+        type=float,
+        help="Weight decay regularization for the optimizer",
+    )
+    args.add_argument(
+        "-bs",
+        "--batch_size",
+        default=32,
+        type=int,
+        help="Batch size of the training data",
+    )
+    args.add_argument(
+        "-g",
+        "--gamma",
+        default=1,
+        type=float,
+        help="Gamma value for the learning rate scheduler",
+    )
+    args.add_argument(
+        "--data_path", default="datasets", type=str, help="Path to .csv data sets"
+    )
+    args.add_argument("--gpu_id", default=0, type=int, help="Index of which GPU to use")
+    args.add_argument(
+        "--file_path",
+        default="parameter_study.json",
+        type=str,
+        help="Filename to training outcomes",
+    )
+    args.add_argument(
+        "--use_logger",
+        default="False",
+        choices=["True", "False"],
+        type=str,
+        help="Whether to use WandB logger or not. "
+        + "Has to be configured in the wandb_logger.py file.",
+    )
 
-    
     args = args.parse_args()
 
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu_id)
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
 
-    name = '_'.join([args.name, f'd-{args.depth}','h-'+'-'.join([str(i) for i in args.hidden_sizes]), 
-                    'p-'+'-'.join([str(i) for i in args.dropout_ps]), args.activation_fn,
-                    f's-{'t' if args.learnable_skip=='True' else 'f'}', f'l-{args.learning_rate}',
-                    f'e-{args.num_epochs}', f'w-{args.weight_decay}', f'b-{args.batch_size}',
-                    f'g-{args.gamma}'])
+    name = "_".join(
+        [
+            args.name,
+            f"d-{args.depth}",
+            "h-" + "-".join([str(i) for i in args.hidden_sizes]),
+            "p-" + "-".join([str(i) for i in args.dropout_ps]),
+            args.activation_fn,
+            f"s-{'t' if args.learnable_skip=='True' else 'f'}",
+            f"l-{args.learning_rate}",
+            f"e-{args.num_epochs}",
+            f"w-{args.weight_decay}",
+            f"b-{args.batch_size}",
+            f"g-{args.gamma}",
+        ]
+    )
 
-    result_metadata_dict = {name: {'metadata': {'depth': args.depth, 'hidden_sizes': args.hidden_sizes,
-                                            'dropout_ps': args.dropout_ps,'activation_fn': args.activation_fn,
-                                            'learnable_skip': args.learnable_skip, 'lr': args.learning_rate,
-                                            'num_epochs': args.num_epochs, 'weight_decay': args.weight_decay,
-                                            'batch_size': args.batch_size, 'gamma': args.gamma}}}
-    
-    args.use_logger = True if args.use_logger=='True' else 'False'
+    result_metadata_dict = {
+        name: {
+            "metadata": {
+                "depth": args.depth,
+                "hidden_sizes": args.hidden_sizes,
+                "dropout_ps": args.dropout_ps,
+                "activation_fn": args.activation_fn,
+                "learnable_skip": args.learnable_skip,
+                "lr": args.learning_rate,
+                "num_epochs": args.num_epochs,
+                "weight_decay": args.weight_decay,
+                "batch_size": args.batch_size,
+                "gamma": args.gamma,
+            }
+        }
+    }
+
+    args.use_logger = True if args.use_logger == "True" else "False"
     if args.use_logger:
-        wandb_config = result_metadata_dict[name]['metadata']
+        wandb_config = result_metadata_dict[name]["metadata"]
         logger = WandBLogger(config=wandb_config)
     else:
         logger = None
 
-    print('Metadata of the training:')
-    for key,value in wandb_config.items():
-        print(f'{key}: {value}')
+    print("Metadata of the training:")
+    for key, value in wandb_config.items():
+        print(f"{key}: {value}")
 
     match args.activation_fn:
-        case 'ReLU':
+        case "ReLU":
             args.activation_fn = F.relu
-        case 'SiLU':
+        case "SiLU":
             args.activation_fn = F.silu
-        case 'GELU':
+        case "GELU":
             args.activation_fn = F.gelu
         case _:
-            raise NameError(f'Unknown activation function {args.activation_fn}.')
-    
-    args.learnable_skip = False if args.learnable_skip=='False' else True
+            raise NameError(f"Unknown activation function {args.activation_fn}.")
 
-    train_result = train(name, args.depth, args.hidden_sizes, args.dropout_ps, args.activation_fn, args.save_path,
-                         args.learnable_skip, args.learning_rate, args.num_epochs, args.weight_decay,
-                         args.batch_size, args.gamma, args.data_path, args.gpu_id, logger)
+    args.learnable_skip = False if args.learnable_skip == "False" else True
+
+    train_result = train(
+        name,
+        args.depth,
+        args.hidden_sizes,
+        args.dropout_ps,
+        args.activation_fn,
+        args.save_path,
+        args.learnable_skip,
+        args.learning_rate,
+        args.num_epochs,
+        args.weight_decay,
+        args.batch_size,
+        args.gamma,
+        args.data_path,
+        args.gpu_id,
+        logger,
+    )
     test_result = test(args.name, f"{args.save_path}/{name}.pth")
-    
+
     result_metadata_dict[name].update(**train_result)
     result_metadata_dict[name].update(**test_result)
-       
-    json_file_path = Path('hyperparameter_study')
+
+    json_file_path = Path("hyperparameter_study")
     json_file_path.mkdir(parents=True, exist_ok=True)
-    json_file_path /= f'{args.name}_hyperparameter_study.json'
-    
+    json_file_path /= f"{args.name}_hyperparameter_study.json"
+
     json_dumper(json_file_path.as_posix(), result_metadata_dict)

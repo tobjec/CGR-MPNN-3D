@@ -6,6 +6,7 @@ import numpy as np
 from cgr_mpnn_3D.utils.graph_features import MolGraph, RxnGraph
 from torch.utils.data import Dataset
 
+
 class ChemDataset(Dataset):
     """
     Dataset class for chemical data, supporting molecule and reaction graph processing.
@@ -15,7 +16,7 @@ class ChemDataset(Dataset):
         mode (str, optional): Processing mode ('mol' for molecules or 'rxn' for reactions). Defaults to 'rxn'.
     """
 
-    def __init__(self, data_path: str, mode: str = 'rxn', data_npz_path: str = None):
+    def __init__(self, data_path: str, mode: str = "rxn", data_npz_path: str = None):
         """
         Initializes the dataset by reading the data, setting the mode, and preparing for graph generation.
 
@@ -26,7 +27,9 @@ class ChemDataset(Dataset):
         super().__init__()
         data_df = pd.read_csv(data_path)
         self.smiles = data_df.iloc[:, 0].values  # SMILES strings
-        self.labels = data_df.iloc[:, 1].values.astype(np.float32)  # Corresponding labels
+        self.labels = data_df.iloc[:, 1].values.astype(
+            np.float32
+        )  # Corresponding labels
         self.mode = mode  # Mode of processing: 'mol' or 'rxn'
         self.graph_dict = {}  # Cache for processed graph representations
         self.use_npz = False
@@ -51,9 +54,9 @@ class ChemDataset(Dataset):
         self.smi = self.smiles[key]
         if self.smi not in self.graph_dict:
             # Generate a graph depending on the processing mode
-            if self.mode == 'mol':
+            if self.mode == "mol":
                 molgraph = MolGraph(self.smi)
-            elif self.mode == 'rxn':
+            elif self.mode == "rxn":
                 molgraph = RxnGraph(self.smi)
             else:
                 raise ValueError("Unknown option for mode", self.mode)
@@ -78,11 +81,15 @@ class ChemDataset(Dataset):
         data = tg.data.Data()
         data.x = torch.tensor(molgraph.f_atoms, dtype=torch.float)  # Atomic features
         if self.use_npz:
-            arr_key = key if key >= 0 else len(self.smiles)-key
+            arr_key = key if key >= 0 else len(self.smiles) - key
             mace_feature = torch.from_numpy(self.mace_features[f"arr_{arr_key}"])
             data.x = torch.concatenate([data.x, mace_feature], dim=1)
-        data.edge_index = torch.tensor(molgraph.edge_index, dtype=torch.long).t().contiguous()  # Edge connections
-        data.edge_attr = torch.tensor(molgraph.f_bonds, dtype=torch.float)  # Bond features
+        data.edge_index = (
+            torch.tensor(molgraph.edge_index, dtype=torch.long).t().contiguous()
+        )  # Edge connections
+        data.edge_attr = torch.tensor(
+            molgraph.f_bonds, dtype=torch.float
+        )  # Bond features
         data.y = torch.tensor([self.labels[key]], dtype=torch.float)  # Target label
         data.smiles = self.smiles[key]  # SMILES string
         return data

@@ -1,6 +1,7 @@
 import torch
 import wandb
 
+
 class WandBLogger:
     """
     A utility class for logging experiment metrics and model details to Weights & Biases (wandb).
@@ -12,16 +13,19 @@ class WandBLogger:
         config (dict, optional): Configuration dictionary for wandb initialization. Defaults to None.
     """
 
-    def __init__(self, enabled=True, model: torch.nn.Module = None, run_name: str = None, config: dict = None):
+    def __init__(
+        self,
+        enabled=True,
+        model: torch.nn.Module = None,
+        run_name: str = None,
+        config: dict = None,
+    ):
         self.enabled = enabled  # Whether wandb logging is enabled
         self.config = config or {}  # Configuration dictionary
 
         if self.enabled:
             wandb.init(
-                entity="tobjec",
-                project="CGR-MPNN-3D",
-                group="tuw",
-                config=self.config
+                entity="tobjec", project="CGR-MPNN-3D", group="tuw", config=self.config
             )
 
             # Set the run name to the provided name or default to the run ID

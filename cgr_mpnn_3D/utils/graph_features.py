@@ -1,6 +1,7 @@
 from rdkit import Chem
 
-def atom_features(atom):
+
+def atom_features(atom: Chem.Atom) -> list:
     """
     Extracts features for an atom including atomic symbol, degree, charge,
     number of hydrogens, hybridization, aromaticity, and mass.
@@ -11,21 +12,30 @@ def atom_features(atom):
     Returns:
         list: Atom features as a one-hot encoding and continuous values.
     """
-    features = onek_encoding_unk(atom.GetSymbol(), ['H', 'C', 'N', 'O', 'F', 'Si', 'P', 'S', 'Cl', 'Br', 'I']) + \
-        onek_encoding_unk(atom.GetTotalDegree(), [0, 1, 2, 3, 4, 5]) + \
-        onek_encoding_unk(atom.GetFormalCharge(), [-1, -2, 1, 2, 0]) + \
-        onek_encoding_unk(int(atom.GetTotalNumHs()), [0, 1, 2, 3, 4]) + \
-        onek_encoding_unk(int(atom.GetHybridization()),[Chem.rdchem.HybridizationType.SP,
-                                                        Chem.rdchem.HybridizationType.SP2,
-                                                        Chem.rdchem.HybridizationType.SP3,
-                                                        Chem.rdchem.HybridizationType.SP3D,
-                                                        Chem.rdchem.HybridizationType.SP3D2]) + \
-        [1 if atom.GetIsAromatic() else 0] + \
-        [atom.GetMass() * 0.01]
+    features = (
+        onek_encoding_unk(
+            atom.GetSymbol(), ["H", "C", "N", "O", "F", "Si", "P", "S", "Cl", "Br", "I"]
+        )
+        + onek_encoding_unk(atom.GetTotalDegree(), [0, 1, 2, 3, 4, 5])
+        + onek_encoding_unk(atom.GetFormalCharge(), [-1, -2, 1, 2, 0])
+        + onek_encoding_unk(int(atom.GetTotalNumHs()), [0, 1, 2, 3, 4])
+        + onek_encoding_unk(
+            int(atom.GetHybridization()),
+            [
+                Chem.rdchem.HybridizationType.SP,
+                Chem.rdchem.HybridizationType.SP2,
+                Chem.rdchem.HybridizationType.SP3,
+                Chem.rdchem.HybridizationType.SP3D,
+                Chem.rdchem.HybridizationType.SP3D2,
+            ],
+        )
+        + [1 if atom.GetIsAromatic() else 0]
+        + [atom.GetMass() * 0.01]
+    )
     return features
 
 
-def bond_features(bond):
+def bond_features(bond: Chem.Bond) -> list:
     """
     Extracts features for a bond including type, conjugation, and ring membership.
 
@@ -48,12 +58,12 @@ def bond_features(bond):
             bt == Chem.rdchem.BondType.TRIPLE,
             bt == Chem.rdchem.BondType.AROMATIC,
             (bond.GetIsConjugated() if bt is not None else 0),
-            (bond.IsInRing() if bt is not None else 0)
+            (bond.IsInRing() if bt is not None else 0),
         ]
     return fbond
 
 
-def onek_encoding_unk(value, choices):
+def onek_encoding_unk(value, choices: list) -> list:
     """
     Encodes a value as a one-hot vector with an additional entry for unknown values.
 
@@ -70,7 +80,7 @@ def onek_encoding_unk(value, choices):
     return encoding
 
 
-def map_reac_to_prod(mol_reac, mol_prod):
+def map_reac_to_prod(mol_reac: Chem.Mol, mol_prod: Chem.Mol) -> dict:
     """
     Maps reactant atom indices to product atom indices based on atom map numbers.
 
@@ -81,12 +91,19 @@ def map_reac_to_prod(mol_reac, mol_prod):
     Returns:
         dict: Mapping from reactant atom indices to product atom indices.
     """
-    prod_map_to_id = dict([(atom.GetAtomMapNum(), atom.GetIdx()) for atom in mol_prod.GetAtoms()])
-    reac_id_to_prod_id = dict([(atom.GetIdx(), prod_map_to_id[atom.GetAtomMapNum()]) for atom in mol_reac.GetAtoms()])
+    prod_map_to_id = dict(
+        [(atom.GetAtomMapNum(), atom.GetIdx()) for atom in mol_prod.GetAtoms()]
+    )
+    reac_id_to_prod_id = dict(
+        [
+            (atom.GetIdx(), prod_map_to_id[atom.GetAtomMapNum()])
+            for atom in mol_reac.GetAtoms()
+        ]
+    )
     return reac_id_to_prod_id
 
 
-def make_mol(smi):
+def make_mol(smi: str) -> Chem.Mol:
     """
     Converts a SMILES string to an RDKit Molecule with explicit hydrogens.
 
@@ -105,6 +122,7 @@ class MolGraph:
     """
     Converts a molecule into a graph representation with atom and bond features.
     """
+
     def __init__(self, smiles: str):
         """
         Args:
@@ -137,6 +155,7 @@ class RxnGraph:
     """
     Converts a chemical reaction into a graph representation with atom and bond features.
     """
+
     def __init__(self, smiles: str):
         """
         Args:
