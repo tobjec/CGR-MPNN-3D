@@ -32,7 +32,8 @@ To set up the CGR-MPNN-3D package, follow these steps:
 3. Install the required dependencies:
    ```bash
    pip3 install -r requirements.txt
-4. Ensure CUDA is properly configured (if using GPU acceleration - strongly recommended).
+4. Go to gitlab and install the [Transition1x](https://gitlab.com/matschreiner/Transition1x) package to your newly created `virtual env`.
+5. Ensure CUDA is properly configured (if using GPU acceleration - strongly recommended).
 
 ## Usage
 

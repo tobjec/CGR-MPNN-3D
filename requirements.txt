@@ -1,13 +1,16 @@
 ase==3.23.0
-numpy==2.2.0
+numpy
 pandas==2.2.3
 rdkit==2024.3.6
-torch==2.5.1
-torch_ema==0.3
-torch_geometric==2.6.1
-torch_scatter==2.1.2
-torch_sparse==0.6.18
+torch_geometric
 mace-torch==0.3.8
 tqdm==4.67.0
 wandb==0.18.7
-git+https://github.com/example/Transition1x.git@main#egg=transition1x
+pyg_lib
+torch_scatter
+torch_sparse
+torch_cluster
+torch_spline_conv
+
+# Custom wheel index URL for specific torch version
+-f https://data.pyg.org/whl/torch-2.5.1+cu124.html
