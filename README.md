@@ -25,7 +25,7 @@ To set up the CGR-MPNN-3D package, follow these steps:
    ```bash
    git clone https://github.com/tobjec/CGR-MPNN-3D.git
    cd CGR-MPNN-3D
-2. Set up a Python environment and activate it:
+2. Set up a Python environment and activate it (requires Python >= 3.10):
    ```bash
    python3 -m venv env
    source env/bin/activate
