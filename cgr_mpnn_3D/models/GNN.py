@@ -35,7 +35,7 @@ class GNN(nn.Module):
             activation_fn (nn.functional, optional): Activation function of the GNN.
                                                      Defaults to F.relu.
             aggr (str, optional): Aggregation of the DMPNN. Defaults to 'add'.
-            pooling_fn (tg.nn, optional): Pooling function.. Defaults to global_add_pool.
+            pooling_fn (tg.nn, optional): Pooling function. Defaults to global_add_pool.
             use_learnable_skip (bool, optional): Flag to use learnable skip in the
                                                  message passing layers. Defaults to False.
         """

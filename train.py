@@ -95,12 +95,6 @@ def train(
         case _:
             raise NameError(f"Unknown model with name '{name}'.")
 
-    print(
-        name.split("_")[0],
-        train_data[0].num_node_features,
-        train_data[0].num_edge_features,
-    )
-
     model = GNN(
         train_data[0].num_node_features,
         train_data[0].num_edge_features,
@@ -190,9 +184,7 @@ if __name__ == "__main__":
     )
     args.add_argument(
         "--learnable_skip",
-        default="False",
-        choices=["True", "False"],
-        type=str,
+        action='store_true',
         help="Using of learnable skip connections",
     )
     args.add_argument(
@@ -237,9 +229,7 @@ if __name__ == "__main__":
     )
     args.add_argument(
         "--use_logger",
-        default="False",
-        choices=["True", "False"],
-        type=str,
+        action='store_true',
         help="Whether to use WandB logger or not. "
         + "Has to be configured in the wandb_logger.py file.",
     )
@@ -281,7 +271,6 @@ if __name__ == "__main__":
         }
     }
 
-    args.use_logger = True if args.use_logger == "True" else "False"
     if args.use_logger:
         wandb_config = result_metadata_dict[name]["metadata"]
         logger = WandBLogger(config=wandb_config)
@@ -301,8 +290,6 @@ if __name__ == "__main__":
             args.activation_fn = F.gelu
         case _:
             raise NameError(f"Unknown activation function {args.activation_fn}.")
-
-    args.learnable_skip = False if args.learnable_skip == "False" else True
 
     train_result = train(
         name,

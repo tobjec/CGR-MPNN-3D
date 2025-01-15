@@ -181,3 +181,4 @@ MACE_run.ipynb
 datasets/test.npz
 datasets/train.npz
 datasets/val.npz
+cli_tool/

@@ -6,7 +6,6 @@ from pathlib import Path
 import numpy as np
 import os
 from cgr_mpnn_3D.data.ChemDataset import ChemDataset
-from cgr_mpnn_3D.utils.standardizer import Standardizer
 import tqdm
 from wandb_logger import WandBLogger
 
@@ -118,10 +117,6 @@ class RxnGraphTrainer(BaseTrainer):
             pin_memory=torch.cuda.is_available(),
         )
 
-        # Standardizer
-        self.stdizer_train = Standardizer(self.train_loader)
-        self.stdizer_val = Standardizer(self.val_loader)
-
         # Wandb logger
         if self.logger:
             self.logger.watch(self.model)
@@ -144,11 +139,11 @@ class RxnGraphTrainer(BaseTrainer):
             data = data.to(self.device)
             self.optimizer.zero_grad()
             predictions = self.model(data)
-            loss = self.loss_fn(predictions, self.stdizer_train(data.y))
+            loss = self.loss_fn(predictions, data.y)
             loss.backward()
             self.optimizer.step()
             total_loss += self.loss_fn(
-                self.stdizer_train(predictions, rev=True), data.y
+                predictions, data.y
             ).item()
 
         mean_loss = np.sqrt(total_loss / len(self.train_loader.dataset))
@@ -176,7 +171,7 @@ class RxnGraphTrainer(BaseTrainer):
             for data in self.val_loader:
                 data = data.to(self.device)
                 predictions = self.model(data)
-                loss = self.loss_fn(self.stdizer_val(predictions, rev=True), data.y)
+                loss = self.loss_fn(predictions, data.y)
                 total_loss += loss.item()
 
         mean_loss = np.sqrt(total_loss / len(self.val_loader.dataset))
@@ -210,7 +205,7 @@ class RxnGraphTrainer(BaseTrainer):
                 if val_loss < self.best_val_loss:
                     self.best_val_loss = val_loss
                     best_model_path = self.model_save_dir / f"{self.name}.pth"
-                    torch.save(self.model.state_dict(), best_model_path)
+                    torch.save(self.model, best_model_path)
                     print(
                         f"New best model with validation loss RMSE: {self.best_val_loss:.4f} located at {best_model_path}"
                     )
