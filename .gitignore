@@ -182,3 +182,6 @@ datasets/test.npz
 datasets/train.npz
 datasets/val.npz
 cli_tool/
+sweep_results.json
+predicted_vs_true_CGR-MPNN-3D.pdf
+predicted_vs_true_CGR.pdf
