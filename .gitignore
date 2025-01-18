@@ -123,6 +123,12 @@ celerybeat.pid
 # SageMath parsed files
 *.sage.py
 
+# PyTorch saved model files
+*.pth
+
+# Computed numpy array files
+*.npz
+
 # Environments
 .env
 .venv
@@ -181,7 +187,6 @@ MACE_run.ipynb
 datasets/test.npz
 datasets/train.npz
 datasets/val.npz
-cli_tool/
 sweep_results.json
 predicted_vs_true_CGR-MPNN-3D.pdf
 predicted_vs_true_CGR.pdf

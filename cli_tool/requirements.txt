@@ -1,0 +1,15 @@
+ase==3.23.0
+numpy
+pandas==2.2.3
+rdkit==2024.3.6
+torch_geometric
+mace-torch==0.3.8
+tqdm==4.67.0
+pyg_lib
+torch_scatter
+torch_sparse
+torch_cluster
+torch_spline_conv
+
+# Custom wheel index URL for specific torch version (CPU-only)
+-f https://data.pyg.org/whl/torch-2.5.1+cpu.html
