@@ -37,6 +37,51 @@ To set up the CGR-MPNN-3D package, follow these steps:
 
 ## Usage
 
+### Docker Usage
+
+If you prefer to use the model within a Docker container, follow these instructions.
+
+#### Build the Docker Image
+
+1. Navigate to the directory containing the `Dockerfile`.
+2. Build the image using the following command:
+
+```bash
+docker build -t cgr-mpnn-3d .
+```
+
+#### Running the Docker Container
+
+Once the image is built, one can run the CLI tool in a container. The following example demonstrates running it with your data:
+
+```bash
+docker run -v /path/to/your/data:/files cgr-mpnn-3d \
+  --data_path_smiles /files/demo.csv \
+  --data_path_coordinates /files/demo.xyz \
+  --data_path_model /files/CGR-MPNN-3D_<model_id>.pth \
+  --data_path_results /files/results.txt \
+  --store_results --print_results
+  ```
+#### Explanation of arguments:
+
+- `/path/to/your/data`: This is the local directory containing your SMILES file, coordinates file, and model file. These will be mounted to the `/files` directory within the Docker container.
+
+#### Default arguments:
+- `--data_path_smiles`: Defaults to `cli_tool/files/demo.csv`
+- `--data_path_coordinates`: Defaults to `cli_tool/files/demo.xyz`
+- `--data_path_model`: Defaults to `cli_tool/files/CGR-MPNN-3D_94owmnhg.pth`
+- `--data_path_results`: Defaults to `cli_tool/results.txt`
+- `--store_results`: Defaults to no (not saving results)
+- `--print_results`: Defaults to no (not printing results)
+
+### Download the Pretrained Model
+
+If you don't have the pretrained model file (.pth), you can download it:
+
+1. Visit the GitHub Releases section for this repository.
+2. Download the `.pth` file for the model.
+3. Place the downloaded model file in your local data directory (`/path/to/your/data`).
+
 ### Training
 
 To train the model, use the following command-line interface (CLI):
@@ -106,11 +151,11 @@ The error metric used for this project is the Mean Squared Error (MSE) between p
 
 #### Target Metric
 
-The target for this metric was an testing RMSE of **11.18 kcal/mol**, which was determined based on the benchmark reference model without using the 3D descriptors.
+The target for this metric was an testing RMSE of **9.22 kcal/mol**, which was determined based on the benchmark reference model without using the 3D descriptors.
 
 #### Achieved Metric
 
-The achieved testing RMSE for the 3D-enhanced model was **7.42 kcal/mol**, surpassing the target value.
+The achieved testing RMSE for the 3D-enhanced model was **5.21 kcal/mol**, surpassing the target value.
 
 ## Work Breakdown and Time Tracking
 
@@ -119,12 +164,12 @@ Below is the time spent on each task:
 | Task | Planned Time (h) | Actual Time (h) |
 |----------|----------|----------|
 | Literature Review   | 8   | 12  |
-| Dataset Preprocessing | 5   | 10  |
+| Dataset Preprocessing | 5   | 15  |
 | Pipeline Implementation | 15 | 22 |
 | MACE Integration | 8 | 10 |
 | Training and Evaluation | 15 | 8 |
-| Documentation | 4 | 7 |
-|**Total** | 55 | 69 |
+| Documentation | 4 | 13 |
+|**Total** | 55 | 80 |
 
 ## Deviation from Submitted Project Plan
 
